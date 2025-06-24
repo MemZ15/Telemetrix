@@ -63,18 +63,15 @@ seCiCallbacks_swap modules::get_CIValidate_ImageHeaderEntry() {
     };
     const char* mask = "xxx????";
 
+    auto test = ( ULONG_PTR )ntoskrnl_ptr - mod_base;
+
+    std::printf( "[*] ntoskrnl.exe Entry Point: 0x%p\n", test );
 
     DWORD64 seCiCallbacksInstr = helpers::find_pattern( uNtAddr, modinfo.SizeOfImage, pattern, mask, 0 );
 
-    INT32 seCiCallbacksLeaOffset = *( INT32* )( seCiCallbacksInstr + 3 );
+    wprintf( L"[*] Usermode CiCallbacks: 0x%016llX\n", seCiCallbacksInstr );
 
-    DWORD64 nextInstructionAddr = seCiCallbacksInstr + 3 + 4;
-
-    DWORD64 seCiCallbacksAddr = nextInstructionAddr + seCiCallbacksLeaOffset;
-
-    wprintf( L"[*] Usermode CiCallbacks: 0x%016llX\n", seCiCallbacksAddr );
-
-    DWORD64 KernelOffset = seCiCallbacksAddr - uNtAddr;
+    DWORD64 KernelOffset = seCiCallbacksInstr - uNtAddr;
     wprintf( L"[*] Offset: 0x%016llX\n", KernelOffset );
 
     DWORD64 kernelAddress = mod_base + KernelOffset;
@@ -83,10 +80,11 @@ seCiCallbacks_swap modules::get_CIValidate_ImageHeaderEntry() {
 
     DWORD64 ciValidateImageHeaderEntry = kernelAddress + 0x20; // Offset 0x20: Entry point of CiValidateImageHeader within ci.dll (nt!SeValidateImageHeader)
 
+    std::printf( "[*] ciValidateImageHeaderEntry: 0x%p\n", ciValidateImageHeaderEntry );
 
     std::printf( "[*] zwFlushInstructionCache: 0x%p\n", zwFlushInstructionCache );
 
-    std::printf( "[*] ciValidateImageHeaderEntry: 0x%p\n", ciValidateImageHeaderEntry );
+    std::printf( "[*] ciValidateImageHeaderEntry: 0x%p\n", kernelAddress );
 
     system( "pause" );
     return seCiCallbacks_swap{ 0 };
