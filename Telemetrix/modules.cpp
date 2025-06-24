@@ -59,7 +59,7 @@ seCiCallbacks_swap modules::get_CIValidate_ImageHeaderEntry() {
     std::printf( "[*] ntoskrnl.exe Entry Point: 0x%p\n", ep );
 
     unsigned char pattern[] = {
-        0x48, 0x8D, 0x05, 0x00, 0x00, 0x00, 0x00  // lea rax,[rip+xxxxxxx]
+        0x48, 0x8D, 0x05, 0x00, 0x00, 0x00, 0x00 
     };
     const char* mask = "xxx????";
 
@@ -76,6 +76,8 @@ seCiCallbacks_swap modules::get_CIValidate_ImageHeaderEntry() {
 
     DWORD64 KernelOffset = seCiCallbacksAddr - uNtAddr;
     wprintf( L"[*] Offset: 0x%016llX\n", KernelOffset );
+
+    DWORD64 kernelAddress = mod_base + KernelOffset;
 
     DWORD64 zwFlushInstructionCache = ( DWORD64 )helpers::GetProcAddress( ntoskrnl_ptr, L"ZwFlushInstructionCache" ) - uNtAddr + mod_base;
 
