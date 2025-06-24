@@ -77,8 +77,6 @@ seCiCallbacks_swap modules::get_CIValidate_ImageHeaderEntry() {
     DWORD64 KernelOffset = seCiCallbacksAddr - uNtAddr;
     wprintf( L"[*] Offset: 0x%016llX\n", KernelOffset );
 
-    DWORD64 kernelAddress = mod_base + KernelOffset;
-
     DWORD64 zwFlushInstructionCache = ( DWORD64 )helpers::GetProcAddress( ntoskrnl_ptr, L"ZwFlushInstructionCache" ) - uNtAddr + mod_base;
 
     DWORD64 ciValidateImageHeaderEntry = kernelAddress + 0x20; // Offset 0x20: Entry point of CiValidateImageHeader within ci.dll (nt!SeValidateImageHeader)
