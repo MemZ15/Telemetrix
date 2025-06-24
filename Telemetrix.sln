@@ -1,0 +1,42 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.12.35521.163 d17.12
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Telemetrix", "Telemetrix\Telemetrix.vcxproj", "{A5BE2F6F-D5AA-4FE0-B5EA-9F4D2E7083A4}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Driver Component", "Driver Component\Driver Component.vcxproj", "{740455D2-BEF4-48E9-844B-890A576F072B}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
+		Release|x64 = Release|x64
+		Release|x86 = Release|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{A5BE2F6F-D5AA-4FE0-B5EA-9F4D2E7083A4}.Debug|x64.ActiveCfg = Debug|x64
+		{A5BE2F6F-D5AA-4FE0-B5EA-9F4D2E7083A4}.Debug|x64.Build.0 = Debug|x64
+		{A5BE2F6F-D5AA-4FE0-B5EA-9F4D2E7083A4}.Debug|x86.ActiveCfg = Debug|Win32
+		{A5BE2F6F-D5AA-4FE0-B5EA-9F4D2E7083A4}.Debug|x86.Build.0 = Debug|Win32
+		{A5BE2F6F-D5AA-4FE0-B5EA-9F4D2E7083A4}.Release|x64.ActiveCfg = Release|x64
+		{A5BE2F6F-D5AA-4FE0-B5EA-9F4D2E7083A4}.Release|x64.Build.0 = Release|x64
+		{A5BE2F6F-D5AA-4FE0-B5EA-9F4D2E7083A4}.Release|x86.ActiveCfg = Release|Win32
+		{A5BE2F6F-D5AA-4FE0-B5EA-9F4D2E7083A4}.Release|x86.Build.0 = Release|Win32
+		{740455D2-BEF4-48E9-844B-890A576F072B}.Debug|x64.ActiveCfg = Debug|x64
+		{740455D2-BEF4-48E9-844B-890A576F072B}.Debug|x64.Build.0 = Debug|x64
+		{740455D2-BEF4-48E9-844B-890A576F072B}.Debug|x64.Deploy.0 = Debug|x64
+		{740455D2-BEF4-48E9-844B-890A576F072B}.Debug|x86.ActiveCfg = Debug|x64
+		{740455D2-BEF4-48E9-844B-890A576F072B}.Debug|x86.Build.0 = Debug|x64
+		{740455D2-BEF4-48E9-844B-890A576F072B}.Debug|x86.Deploy.0 = Debug|x64
+		{740455D2-BEF4-48E9-844B-890A576F072B}.Release|x64.ActiveCfg = Release|x64
+		{740455D2-BEF4-48E9-844B-890A576F072B}.Release|x64.Build.0 = Release|x64
+		{740455D2-BEF4-48E9-844B-890A576F072B}.Release|x64.Deploy.0 = Release|x64
+		{740455D2-BEF4-48E9-844B-890A576F072B}.Release|x86.ActiveCfg = Release|x64
+		{740455D2-BEF4-48E9-844B-890A576F072B}.Release|x86.Build.0 = Release|x64
+		{740455D2-BEF4-48E9-844B-890A576F072B}.Release|x86.Deploy.0 = Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
