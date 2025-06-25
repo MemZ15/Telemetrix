@@ -89,18 +89,27 @@ namespace modules {
 namespace helpers {
 
 
-	DWORD64 find_pattern2( DWORD64 base, size_t size, const BYTE* pattern, const char* mask );
-
 	DWORD64 find_pattern( DWORD64 imageBase, size_t imageSize, const unsigned char* pattern, const char* mask, size_t offsetAfterMatch );
+
+	DWORD64 findPattern( DWORD64* base, size_t size, const char* pattern, const char* mask );
 
 	bool CompareByte( const PUCHAR data, const PUCHAR pattern, UINT32 len );
 
 	bool CompareAnsiWide( const char* ansiStr, const wchar_t* wideStr );
 
-	PVOID GetProcessHeapFromPEB();
-
 	uintptr_t GetProcAddress( void* hModule, const wchar_t* wAPIName );
+
 	uintptr_t GetEntryPoint( HMODULE moduleBase );
+
+	static auto match_ascii_icase = []( const wchar_t* a, const wchar_t* b ) -> bool {
+		while ( *a && *b ) {
+			wchar_t ca = *a++, cb = *b++;
+			if ( ca >= L'A' && ca <= L'Z' ) ca |= 0x20;
+			if ( cb >= L'A' && cb <= L'Z' ) cb |= 0x20;
+			if ( ca != cb ) return false;
+		}
+		return *a == *b;
+	};
 }
 
 namespace globals {
