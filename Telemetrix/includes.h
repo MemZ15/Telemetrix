@@ -91,6 +91,10 @@ namespace helpers {
 
 	DWORD64 find_pattern( DWORD64 imageBase, size_t imageSize, const unsigned char* pattern, const char* mask, size_t offsetAfterMatch );
 
+	uintptr_t find_pattern2( uint8_t* base, size_t size, const uint8_t* pattern, const char* mask );
+
+	uintptr_t resolve_lea_target( uintptr_t instr_addr );
+
 	DWORD64 findPattern( DWORD64* base, size_t size, const char* pattern, const char* mask );
 
 	bool CompareByte( const PUCHAR data, const PUCHAR pattern, UINT32 len );

@@ -41,7 +41,7 @@ seCiCallbacks_swap modules::get_CIValidate_ImageHeaderEntry() {
     std::printf( "[*] Kernel Base Address 0x%p\n", globals::nt_base );
 
     ULONG_PTR mod_base = ( ULONG_PTR )globals::nt_base;
-
+    uint8_t* test = ( uint8_t* )globals::nt_base;
     HMODULE usermode_load_va = LoadLibraryEx( L"ntoskrnl.exe", NULL, DONT_RESOLVE_DLL_REFERENCES );
     DWORD64 uNtAddr = ( DWORD64 )usermode_load_va;
     void* ntoskrnl_ptr = ( void* )usermode_load_va;
@@ -54,15 +54,13 @@ seCiCallbacks_swap modules::get_CIValidate_ImageHeaderEntry() {
     uintptr_t ep = helpers::GetEntryPoint( usermode_load_va );
     std::printf( "[*] ntoskrnl.exe Entry Point: 0x%p\n", ep );
 
-    // Pattern:  LEA RAX, [RIP+offset] ; MOV [RBX+20], RAX
     unsigned char pattern[] = {
-        0x48, 0x8D, 0x05, 0x00, 0x00, 0x00, 0x00, // lea rax, [rip+????]
-        0x48, 0x89, 0x43, 0x20                   // mov [rbx+20], rax
+        0x48, 0x8D, 0x05, 0x00, 0x00, 0x00, 0x00
     };
 
-    const char* mask = "xxx????xxxx";
+    const char* mask = "xxx????";
+
     DWORD64 seCiCallbacksInstr1 = helpers::find_pattern( uNtAddr, modinfo.SizeOfImage, pattern, mask, 0 );
-    DWORD64 seCiCallbacksInstr = helpers::find_pattern( uNtAddr, modinfo.SizeOfImage, pattern, mask, 0 );
 
     INT32 seCiCallbacksLeaOffset = *( INT32* )( seCiCallbacksInstr1 + 3 );
 
@@ -71,13 +69,16 @@ seCiCallbacks_swap modules::get_CIValidate_ImageHeaderEntry() {
     DWORD64 seCiCallbacksAddr = nextInstructionAddr + seCiCallbacksLeaOffset;
 
     wprintf( L"[*] seCiCallbacksInstr CiCallbacks: 0x%016llX\n", seCiCallbacksInstr1 );
-    wprintf( L"[*] seCiCallbacksInstr CiCallbacks before operation: 0x%016llX\n", seCiCallbacksInstr );
+    DWORD64 KernelOffset2 = 0x000000006dd87aba;
 
     DWORD64 KernelOffset = seCiCallbacksInstr1 - uNtAddr;
     wprintf( L"[*] Offset: 0x%016llX\n", KernelOffset );
+    wprintf( L"[*] Offset: 0x%016llX\n", KernelOffset2 );
 
     DWORD64 kernelAddress = mod_base + KernelOffset;
-
+    DWORD64 kernelAddress2 = mod_base + KernelOffset;
+    wprintf( L"[*] Kernel Addr Offset: 0x%016llX\n", kernelAddress );
+    wprintf( L"[*] Kernel Addr Offset2: 0x%016llX\n", kernelAddress );
     DWORD64 zwFlushInstructionCache = ( DWORD64 )helpers::GetProcAddress( ntoskrnl_ptr, L"ZwFlushInstructionCache" ) - uNtAddr + mod_base;
 
     DWORD64 ciValidateImageHeaderEntry = kernelAddress + 0x20; // Offset 0x20: Entry point of CiValidateImageHeader within ci.dll (nt!SeValidateImageHeader)
@@ -85,6 +86,28 @@ seCiCallbacks_swap modules::get_CIValidate_ImageHeaderEntry() {
     std::printf( "[*] ciValidateImageHeaderEntry: 0x%p\n", ciValidateImageHeaderEntry );
 
     std::printf( "[*] zwFlushInstructionCache: 0x%p\n", zwFlushInstructionCache );
+
+    // match the pattern first (same as before)
+    DWORD64 instr_addr = helpers::find_pattern( uNtAddr, modinfo.SizeOfImage, pattern, mask, 0 );
+    if ( !instr_addr ) {
+        std::printf( "Pattern not found.\n" );
+        return {};
+    }
+
+    // get the first LEA instruction's offset
+    INT32 lea1_offset = *( INT32* )( instr_addr + 3 );
+    DWORD64 lea1_target = instr_addr + 7 + lea1_offset;
+
+    DWORD64 ciCallbacks = lea1_target - 0x20;
+
+    std::printf( "[+] ciCallbacks: 0x%p\n", ( void* )ciCallbacks );
+
+    // Optionally resolve more entries
+    DWORD64 ciValidateImageHeaderEntry2 = *( DWORD64* )( ciCallbacks + 0x20 );
+    DWORD64 ciValidateImageDataEntry2 = *( DWORD64* )( ciCallbacks + 0x28 );
+
+    std::printf( "[*] CiValidateImageHeader: 0x%p\n", ( void* )ciValidateImageHeaderEntry );
+    std::printf( "[*] CiValidateImageData:   0x%p\n", ( void* )ciValidateImageDataEntry2 );
 
     system( "pause" );
     return seCiCallbacks_swap{ 0 };

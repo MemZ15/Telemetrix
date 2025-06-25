@@ -26,7 +26,27 @@ DWORD64 helpers::find_pattern( DWORD64 imageBase, size_t imageSize, const unsign
     return 0;
 }
 
+uintptr_t helpers::find_pattern2( uint8_t* base, size_t size, const uint8_t* pattern, const char* mask ) {
+    size_t pattern_len = strlen( mask );
 
+    for ( size_t i = 0; i <= size - pattern_len; ++i ) {
+        bool found = true;
+        for ( size_t j = 0; j < pattern_len; ++j ) {
+            if ( mask[j] != '?' && pattern[j] != base[i + j] ) {
+                found = false;
+                break;
+            }
+        }
+        if ( found ) return ( uintptr_t )&base[i];
+    }
+    std::printf( "[-] Pattern not found.\n" );
+    return 0;
+}
+
+uintptr_t helpers::resolve_lea_target( uintptr_t instr_addr ) {
+    int32_t rel_offset = *( int32_t* )( instr_addr + 3 );
+    return instr_addr + 7 + rel_offset; // lea instruction is 7 bytes
+}
 
 bool helpers::CompareByte( const PUCHAR data, const PUCHAR pattern, UINT32 len )
 {
