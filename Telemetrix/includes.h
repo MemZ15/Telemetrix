@@ -15,6 +15,7 @@
 #include <cstdio>   
 #include <cstdint> 
 #include <shlwapi.h>  
+#include <vector>
 
 #pragma comment(lib, "shlwapi.lib")  
 #pragma comment(lib, "ntdll.lib") 
@@ -87,6 +88,23 @@ namespace modules {
 }
 
 namespace helpers {
+	
+	struct PatternMatch {
+		DWORD64 address;
+		DWORD64 target;
+		std::string symbol;
+
+		PatternMatch( DWORD64 addr, DWORD64 tgt, const std::string& sym )
+			: address( addr ), target( tgt ), symbol( sym ) {
+		}
+
+		PatternMatch() : address( 0 ), target( 0 ), symbol( "" ) {}
+	};
+
+	struct EntryPointInfo {
+		uintptr_t absoluteVA; // absolute virtual address in usermode
+		uintptr_t rva;        // relative virtual address (offset inside image)
+	};
 
 
 	DWORD64 find_pattern( DWORD64 imageBase, size_t imageSize, const unsigned char* pattern, const char* mask, size_t offsetAfterMatch );
@@ -103,7 +121,9 @@ namespace helpers {
 
 	uintptr_t GetProcAddress( void* hModule, const wchar_t* wAPIName );
 
-	uintptr_t GetEntryPoint( HMODULE moduleBase );
+	std::vector<helpers::PatternMatch> find_lea_rax_patterns( DWORD64 imageBase, size_t imageSize, const unsigned char* pattern, const char* mask, size_t offsetAfterMatch );
+
+	EntryPointInfo GetEntryPoint( HMODULE moduleBase );
 
 	static auto match_ascii_icase = []( const wchar_t* a, const wchar_t* b ) -> bool {
 		while ( *a && *b ) {
@@ -118,5 +138,7 @@ namespace helpers {
 
 namespace globals {
 	void splashscreen();
-	extern void* nt_base;
+	extern ULONG_PTR nt_base;
+	extern ULONG_PTR nt_base2;
+
 }

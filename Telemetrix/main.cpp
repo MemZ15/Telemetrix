@@ -1,6 +1,7 @@
 #include "includes.h"
 
-void* globals::nt_base{ nullptr };
+ULONG_PTR globals::nt_base;
+ULONG_PTR globals::nt_base2;
 
 int main() {
 

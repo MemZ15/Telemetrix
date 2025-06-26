@@ -1,4 +1,5 @@
 #include "includes.h"
+#include <DbgHelp.h>
 
 DWORD64 helpers::find_pattern( DWORD64 imageBase, size_t imageSize, const unsigned char* pattern, const char* mask, size_t offsetAfterMatch = 0 ) {
     size_t patternSize = strlen( mask );
@@ -98,4 +99,52 @@ uintptr_t helpers::GetProcAddress( void* hModule, const wchar_t* wAPIName )
         }
     }
     return 0;
+}
+
+
+std::vector<helpers::PatternMatch> helpers::find_lea_rax_patterns(
+    DWORD64 imageBase,
+    size_t imageSize,
+    const unsigned char* pattern,
+    const char* mask,
+    size_t offsetAfterMatch
+) {
+    std::vector<PatternMatch> matches;
+    size_t patternLength = strlen( mask );
+
+    for ( size_t i = 0; i <= imageSize - patternLength; ++i ) {
+        bool match = true;
+
+        for ( size_t j = 0; j < patternLength; ++j ) {
+            if ( mask[j] != '?' && pattern[j] != *( unsigned char* )( imageBase + i + j ) ) {
+                match = false;
+                break;
+            }
+        }
+
+        if ( !match ) continue;
+        if ( match ) {
+            DWORD64 instrAddr = imageBase + i + 4; // LEA is likely at offset +4
+            DWORD32 leaOffset = *( DWORD32* )( instrAddr + 3 );
+
+            // Prevent 64-bit overflow by splitting logic
+            DWORD32 instrLow = ( DWORD32 )instrAddr;
+            DWORD32 addrLow = instrLow + 3 + 4 + leaOffset;
+            DWORD64 targetAddr = ( instrAddr & 0xFFFFFFFF00000000 ) + addrLow;
+
+            std::printf( "[*] usermode CiCallbacks : %p\n", ( void* )targetAddr );
+            DWORD64 offsetInImage = targetAddr - imageBase;
+            std::printf( "[*] Offset  : %p\n", ( void* )offsetInImage );
+
+            // Convert usermode offset to kernel address
+            DWORD64 kernelAddress = globals::nt_base + offsetInImage;
+            std::printf( "[*] Kernel CiCallbacks : %p\n", ( void* )kernelAddress );
+        }
+    }
+
+    if ( matches.empty() ) {
+        std::printf( "[-] No pattern matches found.\n" );
+    }
+
+    return matches;
 }
