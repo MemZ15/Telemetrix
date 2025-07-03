@@ -34,7 +34,7 @@ Telemetrix is intended for educational and ethical research purposes **only**. M
 
 ## Demo
 
-![Telemetrix Banner](https://cdn.discordapp.com/attachments/1217690516804866172/1387031701133459577/image.png?ex=685bdd6f&is=685a8bef&hm=9bd801ea32871c276d2bbe685ad4364177c7fee2176f5b1a29dc2c209d426835)
+![Telemetrix](https://cdn.discordapp.com/attachments/1217690516804866172/1387031701133459577/image.png?ex=685bdd6f&is=685a8bef&hm=9bd801ea32871c276d2bbe685ad4364177c7fee2176f5b1a29dc2c209d426835)
 
 ---
 ## 📌 Roadmap
