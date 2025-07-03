@@ -2,7 +2,17 @@
 #include <DbgHelp.h>
 #include "ntdll.h"
 
-
+/*
+* EnumerateKernelModules
+*
+* Purpose:
+*
+* Retrieve ntoskrnl.exe base image addr from kernel space.
+*
+* Params:
+*
+* _IN_ targetModuleName
+*/
 
 PVOID modules::EnumerateKernelModules( const std::wstring& targetModuleName )
 {
@@ -30,10 +40,19 @@ PVOID modules::EnumerateKernelModules( const std::wstring& targetModuleName )
             }
         } else
             std::wcerr << L"[!] Failed to get driver base name for driver at: " << drivers[i] << std::endl; break;
-    }    
-    return 0; // Failed, just return false
+    }   
+    // Failed, just return false
+    return 0; 
 }
 
+
+/*
+* get_CIValidate_ImageHeaderEntry
+*
+* Purpose:
+*
+* patch SeValidateImageHeader
+*/
 
 seCiCallbacks_swap modules::get_CIValidate_ImageHeaderEntry() {
     PVOID kModuleBase = modules::EnumerateKernelModules( L"ntoskrnl.exe" );
@@ -76,30 +95,3 @@ seCiCallbacks_swap modules::get_CIValidate_ImageHeaderEntry() {
 
 
 
-helpers::EntryPointInfo helpers::GetEntryPoint( HMODULE moduleBase ) {
-    if ( !moduleBase )
-        return { 0, 0 };
-
-    unsigned char* base = reinterpret_cast< unsigned char* >( moduleBase );
-
-    auto* dosHeader = reinterpret_cast< IMAGE_DOS_HEADER* >( base );
-    if ( dosHeader->e_magic != IMAGE_DOS_SIGNATURE )
-        return { 0, 0 };
-
-    auto* ntHeaders = reinterpret_cast< PIMAGE_NT_HEADERS64 >( base + dosHeader->e_lfanew );
-    if ( !ntHeaders || ntHeaders->Signature != IMAGE_NT_SIGNATURE )
-        return { 0, 0 };
-
-    if ( ntHeaders->OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR64_MAGIC ||
-        ntHeaders->OptionalHeader.SizeOfImage < 0x100000 ||
-        ntHeaders->FileHeader.NumberOfSections < 20 ) {
-        return { 0, 0 };
-    }
-
-    globals::nt_base2 = ntHeaders->OptionalHeader.ImageBase;
-
-    uintptr_t rva = ntHeaders->OptionalHeader.AddressOfEntryPoint;
-    uintptr_t absVA = reinterpret_cast< uintptr_t >( base + rva );
-
-    return { absVA, rva };
-}

@@ -27,7 +27,7 @@
     <ClCompile Include="modules.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="load.cpp">
+    <ClCompile Include="loader.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

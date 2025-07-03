@@ -41,15 +41,14 @@ typedef struct _GIOMemcpyInput
 } GIOMemcpyInput, * PGIOMemcpyInput;
 
 namespace vuln {
-	NTSTATUS WindLoadDriver( PWCHAR LoaderName, PWCHAR DriverName, BOOLEAN Hidden );
-	NTSTATUS TriggerExploit( PWSTR LoaderServiceName, PWSTR DriverServiceName, BOOL should_load );
+	NTSTATUS driver_init( PWCHAR LoaderName, PWCHAR DriverName );
+	NTSTATUS drv_call( PWSTR LoaderServiceName, PWSTR DriverServiceName, BOOL should_load );
 }
 
 namespace modules {
 	PVOID EnumerateKernelModules( const std::wstring& targetModuleName);
 
 	seCiCallbacks_swap get_CIValidate_ImageHeaderEntry();
-
 }
 
 namespace helpers {
@@ -63,16 +62,15 @@ namespace helpers {
 
 	uintptr_t GetProcAddress( void* hModule, const wchar_t* wAPIName );
 
-
 	bool find_pattern( const uint8_t* base, size_t scanSize, const uint8_t* pattern, size_t patternSize, uint64_t& outAddress );
 
 	void DeleteService( PWCHAR ServiceName );
 
 	uint64_t ResolveRipRelative( uint64_t instrAddress, int32_t offsetOffset, int instrSize );
 
-	NTSTATUS ReadOriginalCallback( HANDLE DeviceHandle, ULONG64 target, DWORD64& outValue );
+	NTSTATUS read_knrl_mem( HANDLE DeviceHandle, ULONG64 target, DWORD64& outValue );
 
-	NTSTATUS WriteCallback( HANDLE DeviceHandle, ULONG64 target, DWORD64 value );
+	NTSTATUS write_krnl_mem( HANDLE DeviceHandle, ULONG64 target, DWORD64 value );
 
 	NTSTATUS EnsureDeviceHandle( HANDLE* outHandle, PWSTR LoaderServiceName );
 
@@ -88,8 +86,6 @@ namespace helpers {
 
 	void FileNameToServiceName( PWCHAR ServiceName, PWCHAR FileName );
 
-	EntryPointInfo GetEntryPoint( HMODULE moduleBase );
-
 	static auto match_ascii_icase = []( const wchar_t* a, const wchar_t* b ) -> bool {
 		while ( *a && *b ) {
 			wchar_t ca = *a++, cb = *b++;
@@ -104,6 +100,5 @@ namespace helpers {
 namespace globals {
 	void splashscreen();
 	extern ULONG_PTR nt_base;
-	extern ULONG_PTR nt_base2;
 
 }

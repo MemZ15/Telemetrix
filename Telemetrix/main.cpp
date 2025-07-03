@@ -1,7 +1,6 @@
 #include "includes.h"
 
-ULONG_PTR globals::nt_base;
-ULONG_PTR globals::nt_base2;
+ULONG_PTR globals::nt_base{ 0 };
 wchar_t LoaderName[] = L"gdrv.sys";
 wchar_t Driver_Name[] = L"DriverComponent.sys";
 
@@ -12,10 +11,10 @@ int main() {
 
 	globals::splashscreen();
 
-	vuln::WindLoadDriver( LoaderName, Driver_Name, 0 );
+	vuln::driver_init( LoaderName, Driver_Name );
 
-	system( "pause" );
-	return 0;
+	system( "pause" ); 	return 0;
 }
 
 // Need to make file locating dynamic
+// Allocate RW Memory -> MapSection...
