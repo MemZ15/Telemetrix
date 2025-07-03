@@ -8,9 +8,9 @@
 
 This project is currently in **active development**. The core architecture is being designed with an emphasis on:
 
-- Low-level system integration
-- Minimal footprint and traceability
-- Compatibility for the most modern Windows builds
+- Kernel Base Address
+- Retrieval of user-mode and kernel functions
+- DSE bypass
 
 ---
 
