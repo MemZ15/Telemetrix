@@ -11,7 +11,13 @@ int main() {
 
 	globals::splashscreen();
 
-	vuln::driver_init( LoaderName, Driver_Name );
+	void* ImageBasetest;
+	RtlPcToFileHeader( RtlPcToFileHeader, &ImageBasetest );
+	modules::EnumerateKernelModules( L"ntoskrnl.exe" );
+	std::printf( "[RTL] %p", ImageBasetest );
+	
+	//vuln::driver_init( LoaderName, Driver_Name );
+
 
 	system( "pause" ); 	return 0;
 }
