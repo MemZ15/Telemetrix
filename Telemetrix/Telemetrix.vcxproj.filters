@@ -27,12 +27,18 @@
     <ClCompile Include="modules.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="load.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="includes.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="nt_structs.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ntdll.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

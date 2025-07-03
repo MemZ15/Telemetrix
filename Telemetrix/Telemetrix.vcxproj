@@ -100,7 +100,7 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
-      <WarningLevel>Level3</WarningLevel>
+      <WarningLevel>TurnOffAllWarnings</WarningLevel>
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
@@ -129,12 +129,14 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="helpers.cpp" />
+    <ClCompile Include="load.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="miscs.cpp" />
     <ClCompile Include="modules.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="includes.h" />
+    <ClInclude Include="ntdll.h" />
     <ClInclude Include="nt_structs.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

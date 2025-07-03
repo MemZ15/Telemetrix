@@ -30,10 +30,10 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="includes.h">
-      <Filter>Source Files</Filter>
+      <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="nt_structs.h">
-      <Filter>Source Files</Filter>
+      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>
