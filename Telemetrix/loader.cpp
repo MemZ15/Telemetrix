@@ -47,7 +47,7 @@ NTSTATUS vuln::driver_init( PWCHAR LoaderName, PWCHAR DriverName)
 
 	std::wprintf( L"[+] Calling with:\n    Loader: %ls\n    Target: %ls\n", LoaderServiceName, DriverServiceName );
 	wprintf( L"\n" );
-		vuln::drv_call( LoaderServiceName, DriverServiceName, 1 );
+		vuln::drv_call( LoaderServiceName, DriverServiceName, 0 );
 
 	return stat;
 }

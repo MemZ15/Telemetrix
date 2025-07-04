@@ -133,9 +133,7 @@ bool helpers::write_64( DWORD64 address, DWORD64 value ){
     return true;
 }
 
-static const DWORD RTCORE64_MSR_READ_CODE = 0x80002030;
-static const DWORD RTCORE64_MEMORY_READ_CODE = 0x80002048;
-static const DWORD RTCORE64_MEMORY_WRITE_CODE = 0x8000204c;
+
 
 NTSTATUS test::WriteMemoryPrimitive( HANDLE Device, DWORD64 Address, DWORD Value ) {
     helpers::MemoryOperation MemoryRead{};

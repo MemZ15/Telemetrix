@@ -27,7 +27,9 @@ static WCHAR DriverServiceName[MAX_PATH], LoaderServiceName[MAX_PATH];
 #define RTC64_DEVICE_NAME_W								L"\\Device\\RTCore64"
 #define FILE_DEVICE_RTCORE								0x8010
 
-
+const DWORD RTCORE64_MSR_READ_CODE = 0x80002030;
+const DWORD RTCORE64_MEMORY_READ_CODE = 0x80002048;
+const DWORD RTCORE64_MEMORY_WRITE_CODE = 0x8000204c;
 
 struct seCiCallbacks_swap {
 	uint64_t ciValidateImageHeaderEntry;
