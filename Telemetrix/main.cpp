@@ -3,7 +3,7 @@
 ULONG_PTR globals::nt_base{ 0 };
 wchar_t LoaderName[] = L"RTCore64.sys";
 wchar_t Driver_Name[] = L"DriverComponent.sys";
-
+HANDLE helpers::dev = nullptr; // define it once here
 
 int main() {
 

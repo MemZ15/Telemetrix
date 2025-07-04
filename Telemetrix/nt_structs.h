@@ -416,6 +416,7 @@ extern "C" { NTSYSAPI NTSTATUS NTAPI RtlGetFullPathName_UEx( _In_ PWSTR FileName
 extern "C" { NTSYSAPI NTSTATUS NTAPI RtlGetFullPathName_UEx( _In_ PWSTR FileName, _In_ ULONG BufferLength, _Out_writes_bytes_( BufferLength ) PWSTR Buffer, _Out_opt_ PWSTR* FilePart, _Out_opt_ RTL_PATH_TYPE* InputPathType ); }
 
 
+
 typedef struct _RTL_PROCESS_MODULE_INFORMATION
 {
     HANDLE Section;

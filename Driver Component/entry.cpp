@@ -3,9 +3,9 @@
 
 extern "C" NTSTATUS DriverEntry(  ) {
 
-	NTSTATUS stat{ STATUS_SUCCESS };
+	NTSTATUS stat;
 
 	DbgPrint( "[Telemtrix] Driver Loaded" );
-	return stat;
+	return STATUS_SUCCESS;
 }
 

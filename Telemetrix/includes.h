@@ -20,27 +20,13 @@
 
 #pragma comment(lib, "shlwapi.lib")  
 #pragma comment(lib, "ntdll.lib") 
+// todo:  cleaan entire proj
 
 static WCHAR DriverServiceName[MAX_PATH], LoaderServiceName[MAX_PATH];
 
+#define RTC64_DEVICE_NAME_W								L"\\Device\\RTCore64"
+#define FILE_DEVICE_RTCORE								0x8010
 
-#define FILE_DEVICE_GIO				(0xc350)
-#define IOCTL_GIO_MEMCPY			CTL_CODE(FILE_DEVICE_GIO, 0xa02, METHOD_BUFFERED, FILE_ANY_ACCESS)
-#define dev_name					L"\\Device\\GIO"
-
-#define RTC64_DEVICE_NAME_W					L"\\Device\\RTCore64"
-#define RTC64_IOCTL_MEMORY_READ				0x80002048
-#define RTC64_IOCTL_MEMORY_WRITE			0x8000204c
-
-typedef struct RTC64_MEMORY_STRUCT {
-	BYTE Unknown0[8];  // offset 0x00
-	DWORD64 Address;   // offset 0x08
-	BYTE Unknown1[4];  // offset 0x10
-	DWORD Offset;      // offset 0x14
-	DWORD Size;        // offset 0x18
-	DWORD Value;       // offset 0x1c
-	BYTE Unknown2[16]; // offset 0x20
-}RTC64_MEMORY_STRUCT, * PRTC64_MEMORY_STRUCT;
 
 
 struct seCiCallbacks_swap {
@@ -48,8 +34,7 @@ struct seCiCallbacks_swap {
 	uint64_t zwFlushInstructionCache;
 };
 
-typedef struct _GIOMemcpyInput
-{
+typedef struct _GIOMemcpyInput{
 	ULONG64 Dst;
 	ULONG64 Src;
 	DWORD64 Size;
@@ -70,9 +55,21 @@ namespace modules {
 namespace helpers {
 	
 	struct EntryPointInfo {
-		uintptr_t absoluteVA; // absolute virtual address in usermode
-		uintptr_t rva;        // relative virtual address (offset inside image)
+		uintptr_t absoluteVA; 
+		uintptr_t rva;        
 	};
+	struct MemoryOperation
+	{
+		uint8_t gap1[8];     // 8 bytes gap
+		DWORD64 address;	 // 8 bytes
+		uint8_t gap2[4];     // 4 bytes gap
+		uint32_t offset;     // 4 bytes
+		uint32_t size;       // 4 bytes
+		uint32_t data;       // 4 bytes
+		uint8_t gap3[16];    // 16 bytes gap
+	};
+
+	extern HANDLE dev;
 
 	bool CompareAnsiWide( const char* ansiStr, const wchar_t* wideStr );
 
@@ -82,15 +79,25 @@ namespace helpers {
 
 	void DeleteService( PWCHAR ServiceName );
 
+	bool read_32( DWORD64 address, uint32_t& buffer );
+
+	bool read_64( DWORD64 address, DWORD64& buffer );
+
+	bool write_64( DWORD64 address, DWORD64 value );
+
+
+	void WriteMemoryPrimitive( HANDLE Device, DWORD Size, DWORD64 Address, DWORD Value );
+
+
+	bool write_32( DWORD64 address, uint32_t value );
+
 	uint64_t ResolveRipRelative( uint64_t instrAddress, int32_t offsetOffset, int instrSize );
 
-	NTSTATUS read_knrl_mem( HANDLE DeviceHandle, ULONG64 target, DWORD64& outValue );
-
-	BOOL RTCoreReadMemory( HANDLE DeviceHandle, ULONG_PTR Address, DWORD ValueSize, DWORD64& Value );
-
-	BOOL RTCoreRead64( ULONG_PTR Address, PDWORD64 Value );
-
-	NTSTATUS write_krnl_mem( HANDLE DeviceHandle, ULONG64 target, DWORD64 value );
+	/*
+	*
+	* Driver Loading Related def
+	*
+	*/
 
 	NTSTATUS EnsureDeviceHandle( HANDLE* outHandle, PWSTR LoaderServiceName );
 
@@ -120,5 +127,9 @@ namespace helpers {
 namespace globals {
 	void splashscreen();
 	extern ULONG_PTR nt_base;
+}
 
+namespace test {
+	NTSTATUS WriteMemoryPrimitive( HANDLE Device, DWORD64 Address, DWORD Value );
+	NTSTATUS WriteMemoryDWORD64( HANDLE Device, DWORD64 Address, DWORD64 Value );
 }
