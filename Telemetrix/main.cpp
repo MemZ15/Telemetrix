@@ -1,7 +1,7 @@
 #include "includes.h"
 
 ULONG_PTR globals::nt_base{ 0 };
-wchar_t LoaderName[] = L"gdrv.sys";
+wchar_t LoaderName[] = L"RTCore64.sys";
 wchar_t Driver_Name[] = L"DriverComponent.sys";
 
 
@@ -11,15 +11,10 @@ int main() {
 
 	globals::splashscreen();
 
-	void* ImageBasetest;
-	RtlPcToFileHeader( RtlPcToFileHeader, &ImageBasetest );
-	modules::EnumerateKernelModules( L"ntoskrnl.exe" );
-	std::printf( "[RTL] %p", ImageBasetest );
-	
-	//vuln::driver_init( LoaderName, Driver_Name );
+	vuln::driver_init( LoaderName, Driver_Name );
 
 
-	system( "pause" ); 	return 0;
+	system( "pause" ); 	return { 0 };
 }
 
 // Need to make file locating dynamic

