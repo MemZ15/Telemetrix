@@ -1,11 +1,13 @@
 #include "includes.h"
 
 
-extern "C" NTSTATUS DriverEntry(  ) {
+extern "C"
+NTSTATUS DriverEntry( _In_ PDRIVER_OBJECT DriverObject, _In_ PUNICODE_STRING RegistryPath )
+{
+    UNREFERENCED_PARAMETER( DriverObject );
+    UNREFERENCED_PARAMETER( RegistryPath );
 
-	NTSTATUS stat;
+    DbgPrint( "[Telemetrix] Hello from kernel land!\n" );
 
-	DbgPrint( "[Telemtrix] Driver Loaded" );
-	return STATUS_SUCCESS;
+    return STATUS_SUCCESS;
 }
-

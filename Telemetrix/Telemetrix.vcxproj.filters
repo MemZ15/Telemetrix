@@ -13,22 +13,34 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="Source Files\loader">
+      <UniqueIdentifier>{80e8b639-975e-4a72-aafe-d8f2879da30e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\loader\mem">
+      <UniqueIdentifier>{381b6911-3699-4001-8c3d-f65a64e96b9d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\loader\mods">
+      <UniqueIdentifier>{39a471d3-3333-4992-bebb-3c9b547129c5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\loader\misc">
+      <UniqueIdentifier>{66e8b6c6-386a-4bdd-8214-aeb2ca486ad6}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="helpers.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="miscs.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="modules.cpp">
-      <Filter>Source Files</Filter>
+      <Filter>Source Files\loader\mods</Filter>
     </ClCompile>
     <ClCompile Include="loader.cpp">
-      <Filter>Source Files</Filter>
+      <Filter>Source Files\loader</Filter>
+    </ClCompile>
+    <ClCompile Include="helpers.cpp">
+      <Filter>Source Files\loader\mem</Filter>
+    </ClCompile>
+    <ClCompile Include="miscs.cpp">
+      <Filter>Source Files\loader\misc</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

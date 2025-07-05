@@ -24,9 +24,6 @@
 
 static WCHAR DriverServiceName[MAX_PATH], LoaderServiceName[MAX_PATH];
 
-#define RTC64_DEVICE_NAME_W								L"\\Device\\RTCore64"
-#define FILE_DEVICE_RTCORE								0x8010
-
 const DWORD RTCORE64_MSR_READ_CODE = 0x80002030;
 const DWORD RTCORE64_MEMORY_READ_CODE = 0x80002048;
 const DWORD RTCORE64_MEMORY_WRITE_CODE = 0x8000204c;
@@ -55,10 +52,10 @@ namespace modules {
 }
 
 namespace helpers {
-	
+
 	struct EntryPointInfo {
-		uintptr_t absoluteVA; 
-		uintptr_t rva;        
+		uintptr_t absoluteVA;
+		uintptr_t rva;
 	};
 	struct MemoryOperation
 	{
@@ -70,7 +67,7 @@ namespace helpers {
 		uint32_t data;       // 4 bytes
 		uint8_t gap3[16];    // 16 bytes gap
 	};
-
+	
 	extern HANDLE dev;
 
 	bool CompareAnsiWide( const char* ansiStr, const wchar_t* wideStr );
@@ -81,19 +78,16 @@ namespace helpers {
 
 	void DeleteService( PWCHAR ServiceName );
 
-	bool read_32( DWORD64 address, uint32_t& buffer );
+	uint64_t ResolveRipRelative( uint64_t instrAddress, int32_t offsetOffset, int instrSize );
+
+	bool read( DWORD64 address, uint32_t& buffer );
 
 	bool read_64( DWORD64 address, DWORD64& buffer );
 
+	NTSTATUS write( DWORD64 Address, DWORD Value );
+
 	bool write_64( DWORD64 address, DWORD64 value );
 
-
-	void WriteMemoryPrimitive( HANDLE Device, DWORD Size, DWORD64 Address, DWORD Value );
-
-
-	bool write_32( DWORD64 address, uint32_t value );
-
-	uint64_t ResolveRipRelative( uint64_t instrAddress, int32_t offsetOffset, int instrSize );
 
 	/*
 	*
@@ -131,7 +125,3 @@ namespace globals {
 	extern ULONG_PTR nt_base;
 }
 
-namespace test {
-	NTSTATUS WriteMemoryPrimitive( HANDLE Device, DWORD64 Address, DWORD Value );
-	NTSTATUS WriteMemoryDWORD64( HANDLE Device, DWORD64 Address, DWORD64 Value );
-}

@@ -1,5 +1,5 @@
 #include "includes.h"
-
+#include "map"
 
 void globals::splashscreen() {
     std::printf(
