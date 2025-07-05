@@ -34,7 +34,7 @@ Telemetrix is intended for educational and ethical research purposes **only**. M
 
 ## Demo
 
-![Telemetrix](e.png)
+![Telemetrix](f.png)
 ---
 ## 📌 Roadmap
 
